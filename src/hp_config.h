@@ -22,4 +22,4 @@ void cfgToJson(JsonObject out, bool includeSecrets = false);
 bool cfgPortArmed(uint16_t port);
 
 // The sentinel the UI sends back for "leave this password alone".
-static const char* CFG_SECRET_KEEP = "\x01keep";
+constexpr const char* CFG_SECRET_KEEP = "\x01keep";

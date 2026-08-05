@@ -23,15 +23,6 @@ void webSetApFallback(bool active) { s_apFallback = active; }
 // checked against where it came from, so a mistaken port-80 forward exposes
 // nothing.
 
-static bool isPrivateAddr(const IPAddress& ip) {
-  const uint8_t a = ip[0], b = ip[1];
-  return a == 10                                 // 10.0.0.0/8
-      || (a == 172 && b >= 16 && b <= 31)        // 172.16.0.0/12
-      || (a == 192 && b == 168)                  // 192.168.0.0/16
-      || a == 127                                // loopback
-      || (a == 169 && b == 254);                 // link-local
-}
-
 // True when the client is on the device's own SoftAP subnet.
 static bool isApClient(const IPAddress& ip) {
   IPAddress ap = WiFi.softAPIP();
@@ -53,7 +44,7 @@ static bool sourceAllowed() {
 
   switch (mode) {
     case PANEL_ANYWHERE: return true;
-    case PANEL_PRIVATE:  return isApClient(ip) || isPrivateAddr(ip);
+    case PANEL_PRIVATE:  return isApClient(ip) || hpIsPrivateV4((uint32_t)ip);
     default:             return isApClient(ip);
   }
 }
@@ -196,7 +187,8 @@ static void handleState() {
   art["bytes"]  = artBytes();
   art["failed"] = artFailures();
 
-  svcStatusJson(root["services"].to<JsonObject>());
+  uint32_t knownCat = s_srv.hasArg("cat") ? strtoul(s_srv.arg("cat").c_str(), nullptr, 10) : 0;
+  svcStatusJson(root["services"].to<JsonObject>(), knownCat);
   evStatsJson(root["stats"].to<JsonObject>());
 
   root["authRequired"] = authRequired();

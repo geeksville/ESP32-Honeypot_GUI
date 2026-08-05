@@ -687,6 +687,8 @@ const KINDS = {connect:'conn', probe:'probe', login:'login', command:'cmd',
 let token = sessionStorage.getItem('hp_token') || '';
 let cursor = null, events = [], paused = false, filterSev = 'all', filterText = '';
 let lastState = null;
+// The port catalogue is cached and only refetched when the device says it moved.
+let catalogue = [], catVersion = 0;
 
 /* ---------------------------------------------------------------- fetch --*/
 async function api(path, opts = {}) {
@@ -909,7 +911,10 @@ function renderMast(st) {
 /* ------------------------------------------------------------------ poll -*/
 async function tick() {
   try {
-    const st = await apiJson(cursor === null ? '/api/state' : '/api/state?cursor=' + cursor);
+    const q = (cursor === null ? '/api/state?' : '/api/state?cursor=' + cursor + '&') + 'cat=' + catVersion;
+    const st = await apiJson(q);
+    if (st.services.catalogue) { catalogue = st.services.catalogue; catVersion = st.services.catVersion; }
+    st.services.catalogue = catalogue;
     lastState = st;
     if (st.events.length) {
       const fresh = cursor !== null;

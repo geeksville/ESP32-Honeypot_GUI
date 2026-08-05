@@ -20,5 +20,5 @@ void   storeClearLog();
 class WiFiClient;
 void storeStreamLog(class WebServer& srv, bool asCsv);
 
-static const char* LOG_PATH  = "/events.ndjson";
-static const char* LOG_PREV  = "/events.1.ndjson";
+constexpr const char* LOG_PATH  = "/events.ndjson";
+constexpr const char* LOG_PREV  = "/events.1.ndjson";

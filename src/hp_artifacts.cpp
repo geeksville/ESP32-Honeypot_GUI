@@ -140,15 +140,9 @@ static void classify(const uint8_t* b, size_t n, char* out, size_t cap) {
 // `wget http://192.168.0.1/` in the fake shell would otherwise have the device
 // probe the LAN on their behalf. Only public destinations are allowed.
 static bool isForbiddenDest(const IPAddress& ip) {
-  const uint8_t a = ip[0], b = ip[1];
-  if (a == 0   || a == 127)                return true;   // this-host / loopback
-  if (a == 10)                             return true;   // RFC1918
-  if (a == 172 && b >= 16  && b <= 31)     return true;   // RFC1918
-  if (a == 192 && b == 168)                return true;   // RFC1918
-  if (a == 169 && b == 254)                return true;   // link-local
-  if (a == 100 && b >= 64  && b <= 127)    return true;   // CGNAT shared space
-  if (a >= 224)                            return true;   // multicast / reserved
-  return false;
+  if (hpIsPrivateV4((uint32_t)ip)) return true;            // RFC1918 / loopback / CGNAT
+  const uint8_t a = ip[0];
+  return a == 0 || a >= 224;                               // this-host, multicast, reserved
 }
 
 // Host portion of an http(s) URL, with any userinfo stripped.

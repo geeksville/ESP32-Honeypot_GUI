@@ -34,8 +34,6 @@ void cfgSetDefaults(AppConfig& c) {
 
 // --------------------------------------------------------------- helpers ---
 
-static bool validPort(uint16_t p) { return p >= 1 && p != 80; }
-
 // Hostnames and usernames end up inside shell output we hand to an attacker.
 // Restricting the alphabet keeps them from smuggling terminal escapes in.
 static bool sanitiseIdent(char* s) {
@@ -167,7 +165,7 @@ bool cfgApplyJson(JsonObjectConst in, String& err, bool lenient) {
   }
   if (in["notifyMinSeverity"].is<uint8_t>()) {
     uint8_t s = in["notifyMinSeverity"];
-    n.notifyMinSeverity = s > SEV_ALERT ? SEV_ALERT : s;
+    n.notifyMinSeverity = (s > SEV_ALERT) ? (uint8_t)SEV_ALERT : s;
   }
   if (in["notifyCooldownS"].is<uint16_t>()) {
     uint32_t c = in["notifyCooldownS"];

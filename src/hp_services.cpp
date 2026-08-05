@@ -94,23 +94,14 @@ struct Listener {
 };
 static Listener s_listeners[HP_MAX_PORTS];
 static uint8_t  s_listenerCount = 0;
+static uint32_t s_catVersion = 1;
 
-void svcApplyConfig() {
-  for (uint8_t i = 0; i < s_listenerCount; i++) {
-    if (s_listeners[i].srv) { s_listeners[i].srv->end(); delete s_listeners[i].srv; }
-  }
-  s_listenerCount = 0;
-
-  for (uint8_t i = 0; i < g_cfg.portCount && s_listenerCount < HP_MAX_PORTS; i++) {
-    const ServiceDef* def = svcFind(g_cfg.ports[i]);
-    if (!def) continue;                     // unknown port, nothing to imitate
-    WiFiServer* srv = new WiFiServer(def->port, 4);
-    srv->begin();
-    srv->setNoDelay(true);
-    s_listeners[s_listenerCount++] = {srv, def};
-    Serial.printf("[svc] armed :%-5u %s\n", def->port, def->product);
-  }
-}
+// Requests a re-arm. Callable from any task: the work itself must happen on the
+// task that pumps the listeners, because svcPump() is dereferencing these very
+// pointers on the other core and deleting them underneath it is a
+// use-after-free. The flag is picked up at the top of the next pump.
+static volatile bool s_reapply = false;
+void svcApplyConfig() { s_reapply = true; }
 
 // ----------------------------------------------------------- connections ---
 
@@ -557,7 +548,6 @@ static void pumpProbe(Conn& c) {
 
     case SVC_HTTP: {
       String req = describeProbe(buf, n);
-      int eol = req.indexOf(' ');
       // Path traversal and shell-injection attempts in a URL are worth flagging.
       bool nasty = req.indexOf("..") >= 0 || req.indexOf("${") >= 0 ||
                    req.indexOf("/bin/") >= 0 || req.indexOf("cgi-bin") >= 0;
@@ -575,7 +565,39 @@ static void pumpProbe(Conn& c) {
   }
 }
 
+static void applyConfigNow() {
+  for (uint8_t i = 0; i < s_listenerCount; i++) {
+    if (s_listeners[i].srv) { s_listeners[i].srv->end(); delete s_listeners[i].srv; }
+  }
+  s_listenerCount = 0;
+
+  for (uint8_t i = 0; i < g_cfg.portCount && s_listenerCount < HP_MAX_PORTS; i++) {
+    const ServiceDef* def = svcFind(g_cfg.ports[i]);
+    if (!def) continue;                     // unknown port, nothing to imitate
+    WiFiServer* srv = new WiFiServer(def->port, 4);
+    srv->begin();
+    srv->setNoDelay(true);
+    s_listeners[s_listenerCount++] = {srv, def};
+    Serial.printf("[svc] armed :%-5u %s\n", def->port, def->product);
+  }
+
+  s_catVersion++;
+
+  // Disarming a port should take effect now, not whenever its sessions happen
+  // to time out.
+  for (Conn& c : s_conns) {
+    if (c.state == C_FREE || !c.def) continue;
+    bool stillArmed = false;
+    for (uint8_t i = 0; i < s_listenerCount; i++) {
+      if (s_listeners[i].def->port == c.def->port) { stillArmed = true; break; }
+    }
+    if (!stillArmed) closeConn(c, "port disarmed");
+  }
+}
+
 void svcPump() {
+  if (s_reapply) { s_reapply = false; applyConfigNow(); }
+
   for (uint8_t i = 0; i < s_listenerCount; i++) acceptOn(s_listeners[i]);
 
   for (Conn& c : s_conns) {
@@ -616,12 +638,17 @@ uint8_t svcActiveConnections() {
   return n;
 }
 
-void svcStatusJson(JsonObject out) {
+uint32_t svcCatalogueVersion() { return s_catVersion; }
+
+void svcStatusJson(JsonObject out, uint32_t knownVersion) {
+  out["catVersion"] = s_catVersion;
   out["slots"]     = MAX_CONNS;
   out["active"]    = svcActiveConnections();
   out["throttled"] = s_throttled;
   out["lanOnly"]   = g_cfg.lanOnly;
   out["nonLocal"]  = s_nonLocal;
+
+  if (knownVersion == s_catVersion) return;   // client's copy is current
 
   JsonArray arr = out["catalogue"].to<JsonArray>();
   for (const ServiceDef& d : CATALOGUE) {

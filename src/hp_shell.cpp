@@ -276,7 +276,9 @@ static void doLs(const ShellSession& s, const String& arg, Print& out) {
     blocks += (child.size + 1023) / 1024;
     if (longList) {
       char line[160];
-      snprintf(line, sizeof(line), "%s %2d %-8s %-8s %8u Feb 12 08:41 %s\r\n",
+      // Precision on the owner fields: the configured user may be far longer
+      // than the column, and without it a long name truncates the whole row.
+      snprintf(line, sizeof(line), "%s %2d %-8.16s %-8.16s %8u Feb 12 08:41 %.64s\r\n",
                child.mode, child.dir ? 2 : 1,
                child.dir && strcmp(child.mode, "drwx------") ? "root" : g_cfg.shellUser,
                child.dir && strcmp(child.mode, "drwx------") ? "root" : g_cfg.shellUser,

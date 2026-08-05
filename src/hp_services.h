@@ -41,4 +41,11 @@ void svcApplyConfig();
 void svcPump();
 
 uint8_t svcActiveConnections();
-void    svcStatusJson(JsonObject out);
+
+// Bumped whenever the armed set changes. The catalogue is ~70% of a status poll
+// and is otherwise identical every time, so the client caches it and only asks
+// again when this moves.
+uint32_t svcCatalogueVersion();
+
+// Includes the catalogue only when `knownVersion` is stale.
+void svcStatusJson(JsonObject out, uint32_t knownVersion);
