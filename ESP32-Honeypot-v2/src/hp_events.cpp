@@ -168,7 +168,12 @@ uint32_t evLog(uint8_t kind, uint8_t sev, uint32_t ip, uint16_t port,
   if (sev < 3) s_sevTotals[sev]++;
   if (kind != EV_SYSTEM) { tallyPort(port); tallyIp(ip, sev, e.uptimeMs); }
   tallyHour(e.ts);
-  if (kind == EV_LOGIN) tallyCred(e.detail);
+  // Scanners fire HTTP/SIP/RTSP request lines at port 23, and the shell dutifully
+  // reads them as a username. They belong in the event log but not in a ranking
+  // of what credentials people are guessing with.
+  bool protocolNoise = strstr(e.detail, " HTTP/") || strstr(e.detail, " SIP/") ||
+                       strstr(e.detail, " RTSP/");
+  if (kind == EV_LOGIN && !protocolNoise) tallyCred(e.detail);
   uint32_t seq = e.seq;
   if (s_lock) xSemaphoreGive(s_lock);
 

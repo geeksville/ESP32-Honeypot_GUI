@@ -488,7 +488,7 @@ code{color:var(--o);font-size:.94em}
           <div class="rows" id="visitors"></div>
         </div>
         <div class="panel glass">
-          <h3>passwords tried</h3>
+          <h3>credentials offered</h3>
           <div class="rows" id="creds"></div>
         </div>
       </div>
@@ -795,7 +795,7 @@ function renderRail(st) {
     `<div class="row" style="--w:${(c.n / cmax * 100).toFixed(0)}%">
        <span class="k" data-copy="${esc(c.v)}">${esc(c.v)}</span>
        <span class="v">${c.n}</span></div>`).join('')
-    : `<div class="empty" style="padding:20px"><p>nothing has tried to log in</p></div>`;
+    : `<div class="empty" style="padding:20px"><p>no credentials offered yet</p></div>`;
 
   const hours = st.stats.hours || [];
   const hmax = Math.max(1, ...hours);
