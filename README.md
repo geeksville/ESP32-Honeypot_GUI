@@ -230,6 +230,22 @@ Bounded by per-sample size (64 KB – 1 MB, default 256 KB), sample count (24) a
 total bytes. Samples are served as `application/octet-stream` named by their
 digest, so nothing can be opened by accident.
 
+**Only public destinations are fetched.** The URL comes from whoever is typing
+into the fake shell, which would otherwise make the collector a request-forgery
+tool aimed at your own network — `wget http://192.168.0.1/` would have the
+honeypot probe your router on their behalf. Hostnames are resolved *first* and
+the answer checked, so a domain pointed at an internal address is refused too.
+RFC1918, loopback, link-local, CGNAT and multicast ranges are all rejected, and
+the attempt is logged as an alert:
+
+```
+[alert] wget payload from http://192.168.8.1/
+[alert] refused to fetch 192.168.8.1 — resolves to 192.168.8.1, off the public internet
+```
+
+That turns a pivot attempt into a detection. It is not a substitute for putting
+the device on an isolated network segment — see below.
+
 ## Alerts
 
 **Settings → Alerts** supports Discord, Telegram, a generic JSON endpoint for
@@ -437,16 +453,31 @@ whole point. Reach the panel from inside the network or over a VPN (WireGuard,
 Tailscale), and set a password regardless: an internet-facing device attracts
 hosts already inside your network too.
 
-### Put it somewhere it cannot reach anything
+### Put it on a segment of its own
 
-The device holds your Wi-Fi credentials in flash and sits on whatever network you
-joined it to. It parses attacker-controlled bytes in C++ across several
-protocols; assume a memory-safety bug exists and plan for it being exploited.
+Assume the firmware can be exploited. It parses attacker-controlled bytes in
+C++ across eight protocols, the ESP32-S3 has no ASLR, and it holds your Wi-Fi
+password in plaintext in flash. The question is not whether that is a risk but
+how much a successful exploit is worth — and the answer should be "nothing".
 
-Put it on an isolated VLAN or a guest network with client isolation and **no
-route to your LAN**. If it is compromised, the blast radius should be one ESP32
-and nothing else. A separate cheap router in front of it, or a dedicated SSID
-with AP isolation, is enough.
+Give it its own SSID, bridge and subnet, and make the firewall asymmetric: you
+reach in, it reaches nothing back.
+
+```
+your LAN      ──►  honeypot          allow   (management)
+honeypot      ──►  tunnel / internet allow   (its whole purpose)
+honeypot      ──►  your LAN          DROP
+honeypot      ──►  router management DROP
+```
+
+Use a throwaway pre-shared key on that SSID, so the copy an attacker extracts
+from flash unlocks only the empty segment they are already on. If the honeypot
+shares a flat bridge with your phone and laptop, no IP firewall rule will help
+you — that traffic is switched, not routed, and never reaches the forward chain.
+
+One consequence worth planning for: a syslog or webhook collector on your own
+LAN becomes unreachable from that segment. Either host it externally, or add a
+single narrow rule for that one destination and port.
 
 ### Expect real volume, and keep flash out of the hot path
 

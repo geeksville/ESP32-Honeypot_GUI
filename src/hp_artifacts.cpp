@@ -133,9 +133,64 @@ static void classify(const uint8_t* b, size_t n, char* out, size_t cap) {
   hpCopy(out, cap, text ? "text" : "binary data");
 }
 
+// ------------------------------------------------------- destination guard ---
+
+// The collector fetches a URL an attacker typed. That makes it a
+// request-forgery primitive aimed at whatever network the honeypot sits on:
+// `wget http://192.168.0.1/` in the fake shell would otherwise have the device
+// probe the LAN on their behalf. Only public destinations are allowed.
+static bool isForbiddenDest(const IPAddress& ip) {
+  const uint8_t a = ip[0], b = ip[1];
+  if (a == 0   || a == 127)                return true;   // this-host / loopback
+  if (a == 10)                             return true;   // RFC1918
+  if (a == 172 && b >= 16  && b <= 31)     return true;   // RFC1918
+  if (a == 192 && b == 168)                return true;   // RFC1918
+  if (a == 169 && b == 254)                return true;   // link-local
+  if (a == 100 && b >= 64  && b <= 127)    return true;   // CGNAT shared space
+  if (a >= 224)                            return true;   // multicast / reserved
+  return false;
+}
+
+// Host portion of an http(s) URL, with any userinfo stripped.
+static String urlHost(const char* url) {
+  String u = url;
+  int scheme = u.indexOf("://");
+  if (scheme < 0) return String();
+  u = u.substring(scheme + 3);
+  int at = u.indexOf('@');
+  if (at >= 0) u = u.substring(at + 1);
+  for (int i = 0; i < (int)u.length(); i++) {
+    char c = u[i];
+    if (c == '/' || c == ':' || c == '?' || c == '#') return u.substring(0, i);
+  }
+  return u;
+}
+
+// Resolves first and checks the answer, so a hostname pointed at an internal
+// address is refused just like a literal one.
+static bool destAllowed(const char* url, String& err, uint32_t ip) {
+  String host = urlHost(url);
+  if (!host.length()) { err = "could not read a host from that URL"; return false; }
+
+  IPAddress dest;
+  if (!dest.fromString(host)) {
+    if (!WiFi.hostByName(host.c_str(), dest)) { err = "host did not resolve"; return false; }
+  }
+  if (isForbiddenDest(dest)) {
+    evLog(EV_PROBE, SEV_ALERT, ip, 23,
+          "refused to fetch %s — resolves to %s, off the public internet",
+          hpSanitize(host, 60).c_str(), dest.toString().c_str());
+    err = "destination is not a public address";
+    return false;
+  }
+  return true;
+}
+
 // ----------------------------------------------------------------- fetch ---
 
 static bool fetchOne(const Job& job, String& err) {
+  if (!destAllowed(job.url, err, job.ip)) return false;
+
   bool tls = strncmp(job.url, "https://", 8) == 0;
 
   WiFiClient plain;
