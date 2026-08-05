@@ -22,6 +22,7 @@ Every screenshot below is this firmware running on an **ESP32-S3-N16R8**
 - [Using the panel](#using-the-panel)
 - [Artifact collector](#artifact-collector)
 - [Alerts](#alerts)
+- [LAN-only mode](#lan-only-mode)
 - [Why only 8 ports](#why-only-8-ports)
 - [Verified against nmap](#verified-against-nmap)
 - [HTTP API](#http-api)
@@ -53,6 +54,8 @@ Every screenshot below is this firmware running on an **ESP32-S3-N16R8**
 - **A control panel** that runs permanently, on your network and on its own
   fallback access point — and that refuses connections from outside your
   network by design, so it stays safe when the bait ports are internet-facing.
+- **LAN-only mode** for running it as an internal canary instead, where every
+  hit is by definition something already inside your network.
 
 ## Hardware you need
 
@@ -261,6 +264,26 @@ Delivery runs on its own task, so a slow or unreachable webhook can never delay
 the honeypot.
 
 ---
+
+## LAN-only mode
+
+Not every honeypot should face the internet. Turn on **Settings → Scope →
+LAN-only** and the bait ports answer private sources and silently hang up on
+everything else.
+
+That changes what the device is for. An internet-facing trap collects volume —
+mostly Mirai, mostly identical, and you learn about the internet. An internal
+canary collects *signal*: nothing on your network has any legitimate reason to
+connect to a fake SMB share, so a single hit means something is scanning from
+inside, which is the part of an intrusion you actually want to catch early.
+
+It also removes the background noise entirely, which makes the alerting useful
+— you can set the severity floor to everything and still expect silence.
+
+One honest limitation: the TCP handshake still completes before the source is
+known, so a scanner sees the port as *open* but gets nothing back. LAN-only
+makes the trap mute, not invisible. If you want it invisible from outside,
+remove the port forward as well.
 
 ## Why only 8 ports
 

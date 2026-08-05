@@ -101,9 +101,19 @@ struct AppConfig {
   // this stays off until the operator turns it on deliberately.
   bool     collectArtifacts;
   uint32_t artMaxBytes;            // per-sample ceiling
+
+  // LAN-only mode. The bait ports answer private sources and ignore everything
+  // else, turning the device into an internal canary: anything that touches it
+  // is already inside the network, so every hit is signal rather than the
+  // constant background scanning a public address attracts.
+  bool     lanOnly;
 };
 
 // ------------------------------------------------------------------ misc ---
+
+// True for RFC1918, loopback, link-local and CGNAT space. Takes an IPv4 in the
+// host byte order WiFiClient::remoteIP() produces.
+bool hpIsPrivateV4(uint32_t ip);
 
 // Formats an IPv4 in host byte order into "192.168.1.5".
 void hpFormatIp(uint32_t ip, char* out, size_t len);

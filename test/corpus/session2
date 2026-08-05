@@ -1,0 +1,5 @@
+admin
+admin
+cd ../../../../..
+ls -la /
+cat ~/.ssh/id_rsa

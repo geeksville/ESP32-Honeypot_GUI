@@ -159,6 +159,7 @@ static const uint16_t RATE_MAX    = 60;      // events logged ...
 static const uint32_t RATE_WINDOW = 10000;   // ... per 10 s from one host
 static RateBin s_rate[RATE_BINS];
 static uint32_t s_throttled = 0;
+static uint32_t s_nonLocal  = 0;
 
 // True when this connection should produce log events.
 static bool rateLogAllowed(uint32_t ip) {
@@ -444,6 +445,19 @@ static void acceptOn(Listener& L) {
   if (!cli) return;
 
   uint32_t ip = (uint32_t)cli.remoteIP();
+
+  // LAN-only: hang up on anything from outside the local network without
+  // answering. A device meant as an internal canary should not be advertising
+  // fake services to the internet even if a port forward is left in place.
+  if (g_cfg.lanOnly && !hpIsPrivateV4(ip)) {
+    if ((s_nonLocal++ & 0x1F) == 0) {
+      evLog(EV_CONNECT, SEV_NOTICE, ip, L.def->port,
+            "ignored: LAN-only mode is on and this is not a local address");
+    }
+    cli.stop();
+    return;
+  }
+
   bool quiet = !rateLogAllowed(ip);
 
   uint8_t fromSameHost = 0;
@@ -606,6 +620,8 @@ void svcStatusJson(JsonObject out) {
   out["slots"]     = MAX_CONNS;
   out["active"]    = svcActiveConnections();
   out["throttled"] = s_throttled;
+  out["lanOnly"]   = g_cfg.lanOnly;
+  out["nonLocal"]  = s_nonLocal;
 
   JsonArray arr = out["catalogue"].to<JsonArray>();
   for (const ServiceDef& d : CATALOGUE) {

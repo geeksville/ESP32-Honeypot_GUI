@@ -1,0 +1,7 @@
+a
+b
+cd ..
+cd ..
+cd ..
+cd /home/admin/../../etc
+cat passwd

@@ -619,6 +619,15 @@ code{color:var(--o);font-size:.94em}
       </fieldset>
 
       <fieldset>
+        <legend>scope</legend>
+        <label class="check">
+          <input type="checkbox" id="fLanOnly" name="lanOnly">
+          <span class="t">LAN-only mode
+            <small>Answer only devices on your own network and silently ignore everything else. Turns the trap into an internal canary: no internet background noise, so anything it records is already inside. Leave off if you are deliberately exposing it.</small></span>
+        </label>
+      </fieldset>
+
+      <fieldset>
         <legend>artifacts</legend>
         <label class="check">
           <input type="checkbox" id="fCollect" name="collectArtifacts">
@@ -886,6 +895,7 @@ function renderMast(st) {
   $('#catchSub').innerHTML = `<b>${st.stats.total}</b> events recorded<br>` +
     `${st.alerts.mode ? st.alerts.sent + ' alerts sent' : 'alerts off'}` +
     `${st.services.throttled ? ' · ' + st.services.throttled + ' throttled' : ''}` +
+    `${st.services.lanOnly ? ' · LAN-only' + (st.services.nonLocal ? ', ' + st.services.nonLocal + ' outside ignored' : '') : ''}` +
     `${st.panelBlocked ? ' · ' + st.panelBlocked + ' panel probes blocked' : ''}`;
 
   const d = st.device;
@@ -1044,6 +1054,7 @@ async function loadConfig() {
     $('#fAlwaysAp').checked = !!c.alwaysAp;
     $('#fLogFlash').checked = !!c.logToFlash;
     $('#fCollect').checked = !!c.collectArtifacts;
+    $('#fLanOnly').checked = !!c.lanOnly;
     $('#fPanelAccess').value = c.panelAccess;
     $('#fArtMax').value = c.artMaxBytes;
     syncArtFields();
@@ -1069,6 +1080,7 @@ $('#cfgForm').addEventListener('submit', async e => {
     alwaysAp: $('#fAlwaysAp').checked,
     logToFlash: $('#fLogFlash').checked,
     collectArtifacts: $('#fCollect').checked,
+    lanOnly: $('#fLanOnly').checked,
     panelAccess: +$('#fPanelAccess').value,
     artMaxBytes: +$('#fArtMax').value,
   };
