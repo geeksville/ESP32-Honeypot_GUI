@@ -115,6 +115,10 @@ void svcApplyConfig() {
 // ----------------------------------------------------------- connections ---
 
 static const uint8_t  MAX_CONNS       = 6;       // see the socket budget in hp_common.h
+// One internet-facing scanner will happily open every slot and sit on them.
+// Reserving headroom means a second visitor is still served while the first is
+// being greedy — the honeypot stays useful during a flood instead of going deaf.
+static const uint8_t  MAX_CONNS_PER_IP = 4;
 static const uint32_t IDLE_BANNER_MS  = 4000;    // binary ports: say hi, listen, go
 static const uint32_t IDLE_LINE_MS    = 25000;   // FTP/SMTP/POP3/IMAP hold a session
 static const uint32_t IDLE_SHELL_MS   = 180000;  // humans think slowly
@@ -441,6 +445,15 @@ static void acceptOn(Listener& L) {
 
   uint32_t ip = (uint32_t)cli.remoteIP();
   bool quiet = !rateLogAllowed(ip);
+
+  uint8_t fromSameHost = 0;
+  for (Conn& x : s_conns) if (x.state != C_FREE && x.ip == ip) fromSameHost++;
+  if (fromSameHost >= MAX_CONNS_PER_IP) {
+    if (!quiet) evLog(EV_CONNECT, SEV_NOTICE, ip, L.def->port,
+                      "declined, %u slots already held by this host", fromSameHost);
+    cli.stop();
+    return;
+  }
 
   Conn* c = freeSlot();
   if (!c) {

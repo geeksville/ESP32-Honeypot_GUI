@@ -16,6 +16,72 @@ static bool      s_apFallback = false;
 
 void webSetApFallback(bool active) { s_apFallback = active; }
 
+// -------------------------------------------------------- source gating ---
+
+// The bait ports are meant to be forwarded to the internet. This one is not.
+// Rather than relying on the operator's firewall being right, every request is
+// checked against where it came from, so a mistaken port-80 forward exposes
+// nothing.
+
+static bool isPrivateAddr(const IPAddress& ip) {
+  const uint8_t a = ip[0], b = ip[1];
+  return a == 10                                 // 10.0.0.0/8
+      || (a == 172 && b >= 16 && b <= 31)        // 172.16.0.0/12
+      || (a == 192 && b == 168)                  // 192.168.0.0/16
+      || a == 127                                // loopback
+      || (a == 169 && b == 254);                 // link-local
+}
+
+// True when the client is on the device's own SoftAP subnet.
+static bool isApClient(const IPAddress& ip) {
+  IPAddress ap = WiFi.softAPIP();
+  return ap[0] != 0 && ip[0] == ap[0] && ip[1] == ap[1] && ip[2] == ap[2];
+}
+
+static uint32_t s_blocked = 0;
+
+static bool sourceAllowed() {
+  IPAddress ip = s_srv.client().remoteIP();
+
+  // An unprotected panel is never reachable from a public address, whatever the
+  // firewall does. It stays reachable on the local network though: locking that
+  // down too would strand anyone who set up Wi-Fi before setting a password,
+  // with no way back in except rejoining the setup AP — and the threat that
+  // actually matters here is exposure to the internet, which this already stops.
+  uint8_t mode = g_cfg.panelAccess;
+  if (g_cfg.adminPass[0] == '\0' && mode > PANEL_PRIVATE) mode = PANEL_PRIVATE;
+
+  switch (mode) {
+    case PANEL_ANYWHERE: return true;
+    case PANEL_PRIVATE:  return isApClient(ip) || isPrivateAddr(ip);
+    default:             return isApClient(ip);
+  }
+}
+
+// Answers a rejected request as a plain web server would. Advertising "honeypot
+// control panel, access denied" to a scanner would defeat the point.
+static void denySource() {
+  IPAddress ip = s_srv.client().remoteIP();
+  if ((s_blocked++ & 0x0F) == 0) {          // log the first, then every 16th
+    evLog(EV_PROBE, SEV_ALERT, (uint32_t)ip, 80,
+          "control panel refused for %s — outside the allowed source range",
+          s_srv.uri().c_str());
+  }
+  s_srv.sendHeader("Server", "Apache/2.4.52 (Ubuntu)");
+  s_srv.send(404, "text/html",
+             "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n<html><head>\n"
+             "<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\n"
+             "<p>The requested URL was not found on this server.</p>\n<hr>\n"
+             "<address>Apache/2.4.52 (Ubuntu) Server Port 80</address>\n</body></html>\n");
+}
+
+// Wraps a handler so no route can forget the check.
+static bool gateSource() {
+  if (sourceAllowed()) return true;
+  denySource();
+  return false;
+}
+
 // ------------------------------------------------------------------ auth ---
 
 // One session at a time is plenty for a device like this, and it keeps the
@@ -47,6 +113,7 @@ static bool tokenMatches(const String& given) {
 }
 
 static bool guard() {
+  if (!gateSource()) return false;
   if (!authRequired()) return true;
   if (tokenMatches(s_srv.header("X-Auth"))) return true;
   s_srv.send(401, "application/json", "{\"error\":\"Sign in to continue\"}");
@@ -133,6 +200,8 @@ static void handleState() {
   evStatsJson(root["stats"].to<JsonObject>());
 
   root["authRequired"] = authRequired();
+  root["panelAccess"]  = g_cfg.panelAccess;
+  root["panelBlocked"] = s_blocked;
 
   // Events newer than the cursor, oldest first.
   static Event buf[MAX_EVENTS_PER_POLL];
@@ -165,12 +234,14 @@ static void handleState() {
 // ---------------------------------------------------------------- routes ---
 
 static void handleRoot() {
+  if (!gateSource()) return;
   s_srv.sendHeader("Content-Encoding", "gzip");
   s_srv.sendHeader("Cache-Control", "public, max-age=600");
   s_srv.send_P(200, "text/html", (const char*)UI_INDEX_GZ, UI_INDEX_GZ_LEN);
 }
 
 static void handleLogin() {
+  if (!gateSource()) return;
   JsonDocument body;
   if (!readBody(body)) return;
 
@@ -309,6 +380,7 @@ void webBegin() {
   // Captive-portal style: anything unknown lands on the panel rather than a 404,
   // so phones that probe for connectivity open the setup page by themselves.
   s_srv.onNotFound([]() {
+    if (!gateSource()) return;
     if (s_srv.uri().startsWith("/api/")) { sendError(404, "No such endpoint"); return; }
     s_srv.sendHeader("Location", "/", true);
     s_srv.send(302, "text/plain", "");

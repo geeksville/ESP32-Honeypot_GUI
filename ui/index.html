@@ -553,6 +553,15 @@ code{color:var(--o);font-size:.94em}
           <input id="fAdminPass" name="adminPass" type="password" autocomplete="new-password" placeholder="unchanged">
           <div class="hint">Required to open this page. Leave blank to keep the current one.</div>
         </div>
+        <div class="field">
+          <label for="fPanelAccess">Reachable from</label>
+          <select id="fPanelAccess" name="panelAccess">
+            <option value="0">The device's own setup network only</option>
+            <option value="1">Private networks (recommended)</option>
+            <option value="2">Anywhere, including the internet</option>
+          </select>
+          <div class="hint">Checked on every request by source address, so forwarding port 80 by mistake exposes nothing — refused requests get a plain 404, not a login page. The bait ports are unaffected; forward those freely. Until a panel password is set this is forced to setup-network-only.</div>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -876,7 +885,8 @@ function renderMast(st) {
 
   $('#catchSub').innerHTML = `<b>${st.stats.total}</b> events recorded<br>` +
     `${st.alerts.mode ? st.alerts.sent + ' alerts sent' : 'alerts off'}` +
-    `${st.services.throttled ? ' · ' + st.services.throttled + ' throttled' : ''}`;
+    `${st.services.throttled ? ' · ' + st.services.throttled + ' throttled' : ''}` +
+    `${st.panelBlocked ? ' · ' + st.panelBlocked + ' panel probes blocked' : ''}`;
 
   const d = st.device;
   $('#fVersion').textContent = 'honeypot ' + d.version;
@@ -1034,6 +1044,7 @@ async function loadConfig() {
     $('#fAlwaysAp').checked = !!c.alwaysAp;
     $('#fLogFlash').checked = !!c.logToFlash;
     $('#fCollect').checked = !!c.collectArtifacts;
+    $('#fPanelAccess').value = c.panelAccess;
     $('#fArtMax').value = c.artMaxBytes;
     syncArtFields();
     $('#fWifiPass').placeholder = c.wifiPassSet ? 'unchanged' : 'not set';
@@ -1058,6 +1069,7 @@ $('#cfgForm').addEventListener('submit', async e => {
     alwaysAp: $('#fAlwaysAp').checked,
     logToFlash: $('#fLogFlash').checked,
     collectArtifacts: $('#fCollect').checked,
+    panelAccess: +$('#fPanelAccess').value,
     artMaxBytes: +$('#fArtMax').value,
   };
   // Empty password fields mean "leave it alone", never "clear it".

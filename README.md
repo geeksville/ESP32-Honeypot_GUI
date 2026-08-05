@@ -27,6 +27,7 @@ Every screenshot below is this firmware running on an **ESP32-S3-N16R8**
 - [HTTP API](#http-api)
 - [Troubleshooting](#troubleshooting)
 - [How it is built](#how-it-is-built)
+- [Exposing it to the internet](#exposing-it-to-the-internet)
 
 ---
 
@@ -50,7 +51,8 @@ Every screenshot below is this firmware running on an **ESP32-S3-N16R8**
   SHA-256, identified by ELF architecture and stored for download.
 - **Alerting** to Discord, Telegram, a JSON endpoint, or syslog.
 - **A control panel** that runs permanently, on your network and on its own
-  fallback access point.
+  fallback access point — and that refuses connections from outside your
+  network by design, so it stays safe when the bait ports are internet-facing.
 
 ## Hardware you need
 
@@ -144,7 +146,11 @@ serial console tells you exactly what to connect to:
 
 - **Wi-Fi network and password** — yours, so the device can join your LAN.
 - **Panel password** — do this now. Until you set one the panel is open to
-  anyone on the network, and the UI shows a red bar saying so.
+  anyone on your local network (never to the internet), and the UI shows a red
+  bar saying so.
+- **Reachable from** — leave at *private networks* unless you know you want
+  otherwise. This is what keeps the panel safe when the bait ports are
+  internet-facing.
 - **Hostname the shell reports** — pick something that fits the network you are
   putting it on. A trap called `honeypot` catches nothing. Default is
   `srv-fileshare`.
@@ -180,6 +186,7 @@ air.
 | Setup network password | `trapdoor123` | `src/main.cpp` → `AP_PASS` |
 | Panel URL, setup mode | `http://192.168.4.1/` | — |
 | Panel URL, on your LAN | DHCP address or `http://srv-fileshare.local/` | Settings → hostname |
+| Panel reachable from | private networks only | Settings → Control panel |
 | **Panel password** | **none — unset on first boot** | Settings → Control panel |
 | Fake shell login | **any username and password are accepted** | by design |
 
@@ -395,11 +402,108 @@ log never has to fit in RAM.
 
 ---
 
-## Usage
+## Exposing it to the internet
 
-This is a canary for a network you control. Do not expose it to the internet
-without upstream filtering — it is a lightweight trap, not
-[Cowrie](https://github.com/cowrie/cowrie).
+This is what the firmware is for — a honeypot on a LAN sees almost nothing,
+while an internet-facing one gets its first Mirai login attempt within minutes.
+Four things change once it is reachable from outside.
+
+### The control panel refuses public sources by design
+
+Port 80 is the control panel, and reaching it means disarming the trap, reading
+everything it captured, or factory-resetting the device. Rather than depend on
+your firewall being right, **the panel checks the source address of every
+request** — so forwarding port 80 by mistake exposes nothing.
+
+| Setting | Reachable from |
+|---|---|
+| Setup network only | Only while joined to the device's own AP |
+| **Private networks** (default) | RFC1918, loopback, link-local, and the AP |
+| Anywhere | No restriction — requires a panel password first |
+
+A refused request gets a plain **Apache 404**, not a login page, so a scanner
+that stumbles onto the port sees a boring web server rather than a honeypot
+control panel worth attacking. Blocked attempts are logged as alerts and counted
+in the panel header, which is a useful signal in itself: someone reached a port
+you did not intend to publish.
+
+While no panel password is set, "anywhere" is refused outright and the mode is
+capped at private, so an unconfigured device can never be administered from the
+internet. Choosing "setup network only" keeps the AP broadcasting, so the setting
+cannot lock you out of your own device.
+
+**Forward the bait ports freely** — 21, 22, 23, 25, 445, 3306, 3389, 8080 are the
+whole point. Reach the panel from inside the network or over a VPN (WireGuard,
+Tailscale), and set a password regardless: an internet-facing device attracts
+hosts already inside your network too.
+
+### Put it somewhere it cannot reach anything
+
+The device holds your Wi-Fi credentials in flash and sits on whatever network you
+joined it to. It parses attacker-controlled bytes in C++ across several
+protocols; assume a memory-safety bug exists and plan for it being exploited.
+
+Put it on an isolated VLAN or a guest network with client isolation and **no
+route to your LAN**. If it is compromised, the blast radius should be one ESP32
+and nothing else. A separate cheap router in front of it, or a dedicated SSID
+with AP isolation, is enough.
+
+### Expect real volume, and keep flash out of the hot path
+
+Internet-facing telnet gets scanned continuously. With 6 connection slots and 8
+listeners, saturation is normal rather than a fault — the slot pool and idle
+deadlines are what keep it serving through a scan instead of locking up.
+
+Two settings matter at that volume:
+
+- **Turn off "write captured events to flash"** (Settings → Storage) and send
+  events to **syslog or a JSON endpoint** instead. Flash is finite; the log
+  rotates at 512 KB with one retained generation, so nothing breaks if you leave
+  it on, but at internet scan rates you are writing to flash constantly for data
+  you are already shipping elsewhere.
+- **Raise the alert cooldown and severity floor.** Set the floor to *credential
+  theft and payload downloads* unless you want a notification for every scan.
+
+Watch `heapMin` in the panel footer over the first week. It is the low-water mark
+since boot; if it keeps falling, something is fragmenting and the device will
+want a periodic reboot.
+
+### The artifact collector fetches from your address
+
+If you enable it, the device makes outbound requests to attacker-controlled
+servers from your public IP. That tells the operator your address is live and
+running something that takes the bait, and it means your IP appears in their
+logs. On a LAN this barely matters; from a home connection it does.
+
+Enable it only if you want the samples, and preferably not from an address you
+care about. It ships disabled.
+
+### It keeps serving through a flood, and restarts itself if it cannot
+
+Two behaviours exist specifically for unattended internet deployment:
+
+- **No single host can take every connection slot.** One address is capped at 4
+  of the 6, so a scanner sitting on open sockets cannot make the device go deaf
+  to everyone else.
+- **It restarts if the heap runs out.** Weeks of attacker-controlled input
+  through String-heavy parsing will fragment memory eventually. If free heap
+  stays under 24 KB across three checks the device logs it and reboots, because
+  a box that is powered but too short on memory to accept a connection is worse
+  than one that restarts and carries on. Captures on flash survive it.
+
+Watch `heapMin` in the panel footer during the first week — it is the low-water
+mark since boot.
+
+### Also worth knowing
+
+- Give the device a static DHCP lease so your port forwards do not drift.
+- Some ISP terms of service prohibit inbound servers on residential lines. Worth
+  a look before you forward ports.
+
+It is a lightweight trap, not [Cowrie](https://github.com/cowrie/cowrie) — there
+is no real filesystem, no session replay and no containment. What it is good at
+is sitting on an address for months on a couple of watts, telling you who is
+knocking and what they try to install.
 
 MIT. Began as a rewrite of
 [7h30th3r0n3/ESP32-Honeypot](https://github.com/7h30th3r0n3/ESP32-Honeypot);

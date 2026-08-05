@@ -56,6 +56,12 @@ static const uint8_t  HP_MAX_PORTS   = 8;
 static const uint8_t  HP_STR         = 96;   // ssid, passwords, hostnames
 static const uint16_t HP_URL         = 256;  // webhook URLs get long
 
+enum PanelAccess : uint8_t {
+  PANEL_AP_ONLY = 0,   // reachable only by joining the device's own network
+  PANEL_PRIVATE,       // + RFC1918 / link-local sources  (default)
+  PANEL_ANYWHERE       // explicit opt-in, including the public internet
+};
+
 enum NotifyMode : uint8_t {
   NOTIFY_OFF = 0,
   NOTIFY_DISCORD,
@@ -84,6 +90,12 @@ struct AppConfig {
 
   bool     alwaysAp;               // keep the setup AP up alongside the LAN
   bool     logToFlash;
+
+  // Where the control panel may be reached from. The bait ports are meant to
+  // face the internet; the panel is not, and forwarding port 80 by accident
+  // should not hand over the device. Enforced on every request by source
+  // address, and forced to PANEL_AP_ONLY while no panel password is set.
+  uint8_t  panelAccess;
 
   // Retrieving a dropper reveals to its operator that this address is live, so
   // this stays off until the operator turns it on deliberately.

@@ -40,6 +40,10 @@ static void startAp(const char* why) {
 
 static void stopApIfIdle() {
   if (!s_apUp || g_cfg.alwaysAp) return;
+  // Restricting the panel to the setup network only makes sense while that
+  // network exists. Closing it here would leave the setting unreachable and the
+  // device recoverable only by reflashing.
+  if (g_cfg.panelAccess == PANEL_AP_ONLY) return;
   if (WiFi.softAPgetStationNum() > 0) return;   // don't cut someone off mid-setup
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
@@ -97,6 +101,7 @@ static void potTask(void*) {
 static void netTask(void*) {
   uint32_t nextCheck = 0;
   uint32_t backoffMs = 10000;
+  uint8_t  lowHeap   = 0;
 
   for (;;) {
     webPump();
@@ -130,8 +135,27 @@ static void netTask(void*) {
         }
       } else {
         backoffMs = 10000;
-        stopApIfIdle();
+        if (g_cfg.panelAccess == PANEL_AP_ONLY) startAp("panel is restricted to the setup network");
+        else                                    stopApIfIdle();
       }
+
+      // Unattended survivability. Weeks of attacker-controlled input through
+      // String-heavy parsing will fragment the heap eventually; a device that
+      // is still powered but too short on memory to accept a connection is
+      // worse than one that restarts and carries on. Flash keeps the log.
+      if (ESP.getFreeHeap() < 24576) {
+        if (++lowHeap >= 3) {
+          Serial.printf("[health] free heap %u for three checks — restarting\n",
+                        ESP.getFreeHeap());
+          evLog(EV_SYSTEM, SEV_ALERT, 0, 0, "restarting: heap exhausted (%u bytes free)",
+                ESP.getFreeHeap());
+          delay(250);
+          ESP.restart();
+        }
+      } else {
+        lowHeap = 0;
+      }
+
       nextCheck = millis() + backoffMs;
     }
     vTaskDelay(pdMS_TO_TICKS(5));
@@ -161,6 +185,7 @@ void setup() {
     startAp("could not join the configured network");
   } else {
     syncClock();
+    if (g_cfg.panelAccess == PANEL_AP_ONLY) startAp("panel is restricted to the setup network");
   }
 
   if (!g_cfg.adminPass[0]) {

@@ -24,6 +24,7 @@ void cfgSetDefaults(AppConfig& c) {
   c.logToFlash         = true;
   c.alwaysAp           = false;
   c.collectArtifacts   = false;
+  c.panelAccess        = PANEL_PRIVATE;
   c.artMaxBytes        = 262144;   // 256 KB covers essentially every IoT dropper
   hpCopy(c.hostname,  HP_STR, "srv-fileshare");
   hpCopy(c.shellUser, HP_STR, "admin");
@@ -174,6 +175,17 @@ bool cfgApplyJson(JsonObjectConst in, String& err, bool lenient) {
   if (in["alwaysAp"].is<bool>())   n.alwaysAp   = in["alwaysAp"];
   if (in["logToFlash"].is<bool>()) n.logToFlash = in["logToFlash"];
   if (in["collectArtifacts"].is<bool>()) n.collectArtifacts = in["collectArtifacts"];
+  if (in["panelAccess"].is<uint8_t>()) {
+    uint8_t v = in["panelAccess"];
+    if (v > PANEL_ANYWHERE) { err = "Unknown control panel access mode"; return false; }
+    // Opening the panel to the whole internet without a password would publish
+    // the device to the first scanner that finds it.
+    if (v == PANEL_ANYWHERE && n.adminPass[0] == '\0') {
+      err = "Set a panel password before allowing access from anywhere";
+      return false;
+    }
+    n.panelAccess = v;
+  }
   if (in["artMaxBytes"].is<uint32_t>()) {
     uint32_t v = in["artMaxBytes"];
     if (v < 1024)      v = 1024;
@@ -227,5 +239,6 @@ void cfgToJson(JsonObject out, bool includeSecrets) {
   out["alwaysAp"]          = g_cfg.alwaysAp;
   out["logToFlash"]        = g_cfg.logToFlash;
   out["collectArtifacts"]  = g_cfg.collectArtifacts;
+  out["panelAccess"]       = g_cfg.panelAccess;
   out["artMaxBytes"]       = g_cfg.artMaxBytes;
 }
