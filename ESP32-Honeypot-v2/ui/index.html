@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>honeypot</title>
+<style>
+/* ==========================================================================
+   Orange phosphor over glass.
+   Everything structural is monospace; orange means live, hot, armed; cool
+   slate means asleep. Panels are translucent over a warm bloom layer, so the
+   blur has something to pick up instead of reading as flat grey alpha.
+   ========================================================================== */
+:root{
+  --void:#0a0908; --ink:#100e0c;
+  --glass:rgba(30,25,20,.58); --glass-hi:rgba(38,32,26,.72); --glass-lo:rgba(22,19,16,.5);
+  --edge:rgba(255,138,42,.15); --edge-2:rgba(255,255,255,.055);
+
+  --o:#ff8c29; --o-hot:#ff6a00; --o-dim:#b35b13; --o-ghost:rgba(255,122,20,.1);
+  --o-glow:rgba(255,106,0,.45);
+  --red:#f5442e; --red-ghost:rgba(245,68,46,.12);
+  /* Dark phosphor green = nominal. It gives the severity ramp a calm low end
+     (green → orange → red) and a visible baseline on the 24 h chart. It is
+     deliberately never used for "armed", so it can't be misread as on/off. */
+  --green:#3f8a63; --green-deep:#1f4a35; --green-ghost:rgba(63,138,99,.13);
+  --slate:#5c646b;
+
+  --fg:#f2ebe3; --fg-2:#a89e93; --fg-3:#6f675e;
+
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono","Liberation Mono",monospace;
+  --r:2px;
+  --pad:clamp(16px,3.5vw,34px);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--void); color:var(--fg);
+  font:400 14px/1.55 var(--mono);
+  letter-spacing:-.005em;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+::selection{background:var(--o-hot);color:#140c04}
+a{color:var(--o);text-decoration:none}
+button,input,select{font:inherit;color:inherit;letter-spacing:inherit}
+:focus-visible{outline:1px solid var(--o);outline-offset:2px}
+
+/* Thin orange scrollbars — the one place chrome should feel like the product. */
+*{scrollbar-width:thin;scrollbar-color:var(--o-dim) transparent}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--o-dim);border-radius:9px;border:3px solid var(--void)}
+::-webkit-scrollbar-thumb:hover{background:var(--o)}
+
+/* --- the bloom: what the glass blurs -------------------------------------
+   Two ember radials, a hairline grid, and scanlines. Kept strictly behind the
+   panels so the texture reads through the blur but never over live text.     */
+.bloom{position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--void)}
+.bloom::before{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(56vw 44vw at 10% -10%, rgba(255,116,10,.30), transparent 60%),
+    radial-gradient(46vw 38vw at 94% 106%, rgba(255,64,0,.20), transparent 58%),
+    radial-gradient(80vw 60vw at 52% 42%, rgba(140,58,10,.14), transparent 72%),
+    linear-gradient(180deg, rgba(255,120,20,.05), transparent 24%);
+}
+.bloom::after{
+  content:"";position:absolute;inset:0;
+  background:
+    repeating-linear-gradient(0deg,rgba(0,0,0,.34) 0 1px,transparent 1px 3px),
+    linear-gradient(90deg,var(--edge-2) 1px,transparent 1px) 0 0/88px 88px,
+    linear-gradient(180deg,var(--edge-2) 1px,transparent 1px) 0 0/88px 88px;
+  opacity:.55;
+}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* --- shared atoms ------------------------------------------------------ */
+/* padding-inline, not the shorthand: .band/.colophon also land on .wrap and a
+   `padding: x 0` there would silently cancel the gutters. */
+.wrap{max-width:1240px;margin:0 auto;padding-inline:var(--pad)}
+.eyebrow{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--fg-3)}
+.glass{
+  background:var(--glass);
+  backdrop-filter:blur(16px) saturate(1.35);
+  -webkit-backdrop-filter:blur(16px) saturate(1.35);
+  border:1px solid var(--edge);
+  border-radius:var(--r);
+  box-shadow:inset 0 1px 0 var(--edge-2), 0 18px 44px -28px rgba(0,0,0,.9);
+}
+@supports not (backdrop-filter:blur(1px)){.glass{background:#191512}}
+
+.btn{
+  background:rgba(255,255,255,.035); border:1px solid var(--edge);
+  color:var(--fg-2); padding:6px 12px; border-radius:var(--r); cursor:pointer;
+  font-size:12.5px; white-space:nowrap;
+  transition:color .16s,border-color .16s,background .16s,box-shadow .16s;
+}
+.btn:hover{color:var(--o);border-color:rgba(255,138,42,.42);background:var(--o-ghost)}
+.btn[data-tone=hot]{
+  background:var(--o-hot);border-color:var(--o-hot);color:#150b02;font-weight:600;
+  box-shadow:0 0 18px -4px var(--o-glow);
+}
+.btn[data-tone=hot]:hover{background:#ff7d1c;border-color:#ff7d1c;color:#150b02}
+.btn[data-tone=danger]{color:#e5705d;border-color:rgba(245,68,46,.3)}
+.btn[data-tone=danger]:hover{color:#ff8b78;background:var(--red-ghost);border-color:var(--red)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Blinking block cursor. Used once in the mark and once at the feed head. */
+.cur{
+  display:inline-block;width:.55em;height:1.05em;vertical-align:-.17em;
+  background:var(--o-hot);box-shadow:0 0 10px var(--o-glow);
+  animation:blink 1.15s steps(1) infinite;
+}
+@keyframes blink{50%{opacity:0}}
+
+/* --- boot reveal: one orchestrated moment, then never again ------------- */
+[data-boot]{opacity:0;transform:translateY(6px);animation:boot .42s ease-out forwards}
+[data-boot="1"]{animation-delay:.02s} [data-boot="2"]{animation-delay:.10s}
+[data-boot="3"]{animation-delay:.18s} [data-boot="4"]{animation-delay:.26s}
+@keyframes boot{to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){[data-boot]{opacity:1;transform:none}}
+
+/* ======================================================== status line === */
+.mast{position:sticky;top:0;z-index:40}
+.mast .bar{
+  display:flex;align-items:center;gap:14px;height:54px;
+  background:rgba(14,12,10,.74);
+  backdrop-filter:blur(20px) saturate(1.4);
+  -webkit-backdrop-filter:blur(20px) saturate(1.4);
+  border-bottom:1px solid var(--edge);
+}
+.mark{display:flex;align-items:center;gap:9px;margin-right:auto;min-width:0}
+.mark b{font-weight:600;font-size:15px;letter-spacing:.02em;color:var(--fg)}
+.comb{width:18px;height:20px;flex:none;color:var(--o-hot);filter:drop-shadow(0 0 6px var(--o-glow))}
+
+/* tmux-style segmented readout: [ STATE ] host · ssid · rssi · addr */
+.state{display:flex;align-items:center;gap:0;font-size:11.5px;white-space:nowrap;min-width:0}
+.state .seg{padding:0 10px;border-left:1px solid var(--edge);color:var(--fg-3);overflow:hidden;text-overflow:ellipsis}
+.state .seg:first-child{border-left:0}
+.state .flag{
+  color:var(--slate);border:1px solid currentColor;padding:2px 7px;border-radius:var(--r);
+  font-size:10px;letter-spacing:.18em;
+}
+.state[data-live="1"] .flag{
+  color:var(--o-hot);background:var(--o-ghost);
+  box-shadow:0 0 14px -3px var(--o-glow);animation:pulse 2.8s ease-in-out infinite;
+}
+@keyframes pulse{50%{box-shadow:0 0 20px 0 var(--o-glow)}}
+.state[data-live="1"] .seg{color:var(--fg-2)}
+@media(max-width:860px){.state .seg[data-opt]{display:none}}
+@media(max-width:600px){.mark b{display:none}}
+
+/* ======================================================== warning ======= */
+.warnbar{background:var(--red-ghost);border-bottom:1px solid rgba(245,68,46,.28);font-size:12.5px;color:#f0a99c}
+.warnbar .wrap{display:flex;gap:10px;align-items:center;padding-block:9px;flex-wrap:wrap}
+.warnbar b{color:#ffc0b4;font-weight:600}
+.warnbar .btn{margin-left:auto}
+
+/* ======================================================== bands ========= */
+.band{padding-block:clamp(24px,3.6vw,40px)}
+.bandhead{display:flex;align-items:flex-end;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.bandhead h2{margin:0;font-size:15px;font-weight:600;letter-spacing:.02em;color:var(--fg)}
+/* Shell prompt marker — a real signpost, not decoration: everything after it
+   is something you can act on. */
+.bandhead h2::before{content:"$ ";color:var(--o-hot)}
+.bandhead .sub{margin-left:auto;text-align:right;font-size:11.5px;color:var(--fg-3);line-height:1.7}
+.bandhead .sub b{color:var(--o);font-weight:600;font-size:14px}
+.note{font-size:11.5px;color:var(--fg-3);line-height:1.6;max-width:70ch;margin:12px 0 0}
+.note::before{content:"# ";color:var(--o-dim)}
+
+/* ======================================================== bait board ==== */
+/* 156px keeps two columns on a 390px phone once the gutters are accounted for
+   (390 - 32 gutter - 9 gap = 349, so 2×156 fits with room to spare). */
+.baitgrid{display:grid;gap:9px;grid-template-columns:repeat(auto-fill,minmax(156px,1fr))}
+.bait{
+  position:relative;text-align:left;cursor:pointer;
+  background:var(--glass-lo);
+  backdrop-filter:blur(14px) saturate(1.25);
+  -webkit-backdrop-filter:blur(14px) saturate(1.25);
+  border:1px solid var(--edge-2);border-radius:var(--r);
+  padding:12px 12px 10px;display:flex;flex-direction:column;gap:6px;min-height:128px;
+  transition:border-color .18s,background .18s,transform .18s,box-shadow .18s;
+}
+.bait:hover{transform:translateY(-2px);border-color:rgba(255,138,42,.4)}
+.bait .pin{
+  position:absolute;top:11px;right:11px;width:7px;height:7px;border-radius:50%;
+  background:var(--slate);transition:background .18s,box-shadow .18s;
+}
+.bait .portno{font-size:26px;font-weight:600;line-height:1;color:var(--fg-3);font-variant-numeric:tabular-nums;transition:color .18s,text-shadow .18s}
+.bait .svc{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--fg-3);transition:color .18s}
+/* The banner string: what the attacker actually reads off the wire. */
+.bait .lie{
+  font-size:10px;line-height:1.5;color:var(--fg-3);opacity:.55;margin-top:auto;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  transition:color .18s,opacity .18s;
+}
+.bait .lie::before{content:"> ";color:var(--o-dim)}
+/* Footer is a real row, not an overlay: the hit count and the [shell] tag used
+   to be absolutely positioned and printed straight over the banner text. */
+.bait .foot{
+  display:flex;align-items:baseline;gap:8px;
+  margin-top:9px;padding-top:8px;border-top:1px solid var(--green-deep);
+}
+.bait .tag{font-size:9px;letter-spacing:.12em;color:var(--o-dim)}
+.bait .hits{margin-left:auto;font-size:12px;color:var(--fg-3);font-variant-numeric:tabular-nums}
+
+.bait[data-armed="1"]{
+  background:linear-gradient(180deg,rgba(255,106,0,.11),rgba(255,106,0,.02) 60%),var(--glass);
+  border-color:rgba(255,138,42,.3);
+  box-shadow:inset 0 1px 0 rgba(255,180,120,.1), 0 0 26px -18px var(--o-glow);
+}
+.bait[data-armed="1"] .pin{background:var(--o-hot);box-shadow:0 0 10px var(--o-glow)}
+.bait[data-armed="1"] .portno{color:var(--fg);text-shadow:0 0 18px rgba(255,140,41,.35)}
+.bait[data-armed="1"] .svc{color:var(--o)}
+.bait[data-armed="1"] .lie{color:var(--fg-2);opacity:.85}
+.bait[data-hot="1"] .hits{color:var(--o-hot);font-weight:600}
+
+/* ======================================================== catch ========= */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:1px;background:var(--edge-2);overflow:hidden;margin-bottom:16px}
+.stat{background:rgba(24,20,17,.62);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);padding:13px 14px}
+.stat .n{display:block;font-size:23px;font-weight:600;line-height:1;margin-bottom:6px;font-variant-numeric:tabular-nums}
+.stat .l{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-3)}
+.stat[data-tone=alert] .n{color:var(--red)}
+.stat[data-tone=hot] .n{color:var(--o);text-shadow:0 0 18px rgba(255,140,41,.3)}
+.stat[data-tone=ok] .n{color:var(--green)}
+
+.toolbar{display:flex;gap:7px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.toolbar input[type=search]{
+  background:rgba(0,0,0,.3);border:1px solid var(--edge-2);border-radius:var(--r);
+  padding:7px 10px;min-width:170px;flex:1 1 170px;font-size:12.5px;
+}
+.toolbar input[type=search]:focus{border-color:rgba(255,138,42,.45)}
+.toolbar input[type=search]::placeholder{color:var(--fg-3)}
+.seg-ctl{display:flex;border:1px solid var(--edge-2);border-radius:var(--r);overflow:hidden}
+.seg-ctl button{background:none;border:0;padding:7px 12px;cursor:pointer;font-size:12px;color:var(--fg-3)}
+.seg-ctl button:hover{color:var(--fg-2)}
+.seg-ctl button[aria-pressed=true]{background:var(--o-ghost);color:var(--o)}
+
+.catchgrid{display:grid;gap:16px;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)}
+@media(max-width:920px){.catchgrid{grid-template-columns:1fr}}
+.panel{overflow:hidden}
+.panel > h3{
+  margin:0;padding:11px 14px;border-bottom:1px solid var(--edge-2);
+  font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--fg-3);
+  font-weight:400;display:flex;align-items:center;gap:9px;
+}
+.panel > h3 .tail{margin-left:auto;letter-spacing:0;font-size:10.5px;color:var(--o-dim);text-transform:none}
+
+/* --- feed -------------------------------------------------------------- */
+.feedhead{display:flex;gap:10px;padding:9px 14px;border-bottom:1px solid var(--edge-2);font-size:11.5px;color:var(--fg-3)}
+.feedhead .lbl{color:var(--green)}
+#feed{max-height:min(58vh,560px);overflow-y:auto}
+.ev{
+  display:grid;grid-template-columns:66px 122px 1fr;gap:11px;align-items:baseline;
+  padding:7px 14px;border-bottom:1px solid rgba(255,255,255,.03);font-size:12.5px;
+}
+.ev:last-child{border-bottom:0}
+.ev .when{font-size:10.5px;color:var(--fg-3);white-space:nowrap}
+.ev .who{font-size:11.5px;color:var(--fg-2);cursor:copy;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .who:hover{color:var(--o)}
+.ev .what{min-width:0;word-break:break-word;color:var(--fg-2)}
+.ev .what b{display:inline-block;min-width:62px;margin-right:8px;font-size:10px;font-weight:400;letter-spacing:.1em;text-transform:uppercase;color:var(--green)}
+.ev[data-sev="1"] .what{color:var(--fg)}
+.ev[data-sev="1"] .what b{color:var(--o-dim)}
+.ev[data-sev="2"]{background:var(--red-ghost);box-shadow:inset 2px 0 0 var(--red)}
+.ev[data-sev="2"] .what{color:#f7c9c0}
+.ev[data-sev="2"] .what b{color:var(--red)}
+.ev[data-new="1"]{animation:land .6s ease-out}
+@keyframes land{from{background:rgba(255,106,0,.16)}}
+@media(max-width:640px){.ev{grid-template-columns:1fr;gap:2px}.ev .what b{min-width:0}}
+
+.empty{padding:42px 22px;text-align:center;color:var(--fg-3);font-size:12.5px}
+.empty .lead{color:var(--fg-2);font-size:14px;margin:0 0 6px}
+.empty p{margin:0}
+
+/* --- rail -------------------------------------------------------------- */
+.rail{display:flex;flex-direction:column;gap:16px}
+.rows{padding:4px 0}
+.row{position:relative;isolation:isolate;display:flex;align-items:baseline;gap:9px;padding:6px 14px;font-size:12px}
+.row::before{content:"";position:absolute;inset:2px auto 2px 0;z-index:-1;width:var(--w,0%);background:var(--o-ghost);border-radius:0 2px 2px 0}
+.row .k{color:var(--fg-2);cursor:copy;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
+.row .k:hover{color:var(--o)}
+.row .t{font-size:10px;color:var(--fg-3);white-space:nowrap}
+.row .v{margin-left:auto;color:var(--fg-3);font-variant-numeric:tabular-nums;font-size:12.5px}
+.row[data-sev="2"] .k{color:#f0b4a8}
+.row[data-sev="2"] .v{color:var(--red)}
+
+/* --- artifacts --------------------------------------------------------- */
+.art{
+  display:grid;grid-template-columns:1fr auto;gap:5px 14px;align-items:baseline;
+  padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.03);
+}
+.art:last-child{border-bottom:0}
+.art .kind{
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--o);
+  border:1px solid rgba(255,138,42,.3);border-radius:var(--r);padding:2px 7px;
+  background:var(--o-ghost);
+}
+.art .size{font-size:11.5px;color:var(--fg-2);margin-left:9px;font-variant-numeric:tabular-nums}
+.art .seen{font-size:10.5px;color:var(--o-dim);margin-left:7px}
+.art .dl{grid-row:1;grid-column:2}
+.art .sha,.art .src,.art .from{grid-column:1/-1;font-size:11px;line-height:1.6}
+.art .sha{color:var(--fg-3);cursor:copy;word-break:break-all}
+.art .sha:hover{color:var(--o)}
+.art .src{color:var(--fg-2);cursor:copy;word-break:break-all}
+.art .src::before{content:"> ";color:var(--o-dim)}
+.art .src:hover{color:var(--o)}
+.art .from{color:var(--fg-3);font-size:10.5px}
+
+.spark{display:flex;align-items:flex-end;gap:2px;height:58px;padding:14px 14px 0}
+.spark i{flex:1;background:var(--green-deep);border-radius:1px 1px 0 0;min-height:3px;transition:height .45s ease-out}
+.spark i[data-on="1"]{background:linear-gradient(180deg,var(--o-hot),var(--o-dim));box-shadow:0 0 10px -2px var(--o-glow)}
+.sparkfoot{display:flex;justify-content:space-between;padding:6px 14px 12px;font-size:9.5px;color:var(--fg-3);letter-spacing:.08em}
+
+.colophon{padding-block:24px 40px;color:var(--fg-3);font-size:10.5px;display:flex;gap:8px;flex-wrap:wrap}
+.colophon span::after{content:" ·";color:var(--o-dim);margin-left:6px}
+.colophon span:last-child::after{content:""}
+
+/* ======================================================== drawer ======== */
+.scrim{position:fixed;inset:0;background:rgba(6,5,4,.72);backdrop-filter:blur(3px);z-index:60;opacity:0;pointer-events:none;transition:opacity .22s}
+.scrim[data-open="1"]{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);z-index:61;
+  background:rgba(18,15,13,.9);
+  backdrop-filter:blur(26px) saturate(1.3);-webkit-backdrop-filter:blur(26px) saturate(1.3);
+  border-left:1px solid var(--edge);
+  transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;
+}
+.drawer[data-open="1"]{transform:none}
+.drawer > header{display:flex;align-items:center;gap:12px;padding:15px var(--pad);border-bottom:1px solid var(--edge)}
+.drawer > header h2{margin:0;font-size:14px;font-weight:600}
+.drawer > header h2::before{content:"$ ";color:var(--o-hot)}
+.drawer > header .btn{margin-left:auto}
+.drawer .body{overflow-y:auto;padding:2px var(--pad) 22px;flex:1}
+.drawer > footer{padding:13px var(--pad);border-top:1px solid var(--edge);display:flex;gap:9px;align-items:center}
+.drawer > footer .hint{margin-right:auto}
+
+fieldset{border:0;border-top:1px solid var(--edge-2);margin:20px 0 0;padding:16px 0 0}
+legend{padding:0 8px 0 0;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--o-dim)}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:12px;color:var(--fg-2);margin-bottom:5px}
+.field input,.field select{
+  width:100%;background:rgba(0,0,0,.34);border:1px solid var(--edge-2);border-radius:var(--r);
+  padding:9px 10px;font-size:12.5px;
+}
+.field input:focus,.field select:focus{border-color:rgba(255,138,42,.45)}
+.field input::placeholder{color:var(--fg-3)}
+.hint{font-size:11px;color:var(--fg-3);margin-top:5px;line-height:1.55}
+.inline{display:flex;gap:7px;align-items:center}
+.inline input{flex:1}
+.check{display:flex;gap:9px;align-items:flex-start;margin-bottom:12px;cursor:pointer}
+.check input{width:15px;height:15px;margin:2px 0 0;accent-color:var(--o-hot);flex:none}
+.check .t{font-size:12px;color:var(--fg-2)}
+.check small{display:block;color:var(--fg-3);font-size:11px;margin-top:3px;line-height:1.5}
+code{color:var(--o);font-size:.94em}
+
+/* ======================================================== gate ========== */
+.gate{position:fixed;inset:0;z-index:80;display:none;place-items:center;padding:24px;background:var(--void)}
+.gate[data-open="1"]{display:grid}
+.gate .bloom{z-index:0}
+.gate form{width:min(340px,100%);text-align:center;position:relative;z-index:1}
+.gate .comb{width:32px;height:36px;margin-bottom:16px}
+.gate h1{font-size:16px;font-weight:600;margin:0 0 6px;letter-spacing:.02em}
+.gate p{color:var(--fg-3);font-size:11.5px;margin:0 0 20px}
+.gate input{width:100%;text-align:center;background:rgba(0,0,0,.4);border:1px solid var(--edge);border-radius:var(--r);padding:11px;font-size:14px;margin-bottom:9px}
+.gate .btn{width:100%;padding:10px}
+.gate .err{color:var(--red);font-size:11.5px;min-height:17px;margin-top:9px}
+
+/* ======================================================== toasts ======== */
+#toasts{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:90;display:flex;flex-direction:column;gap:7px;align-items:center;pointer-events:none;width:min(440px,calc(100% - 32px))}
+.toast{
+  background:rgba(34,28,23,.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border:1px solid var(--edge);border-left:2px solid var(--green);border-radius:var(--r);
+  padding:10px 14px;font-size:12.5px;color:var(--fg);width:100%;
+  box-shadow:0 16px 40px -18px rgba(0,0,0,.95);animation:rise .24s ease-out;
+}
+.toast::before{content:"› ";color:var(--green)}
+.toast[data-tone=bad]{border-left-color:var(--red)}
+.toast[data-tone=bad]::before{content:"! ";color:var(--red)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+</style>
+</head>
+<body>
+
+<div class="bloom" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<g id="combg">
+  <path d="M9.5 1 16 4.7v7.4L9.5 15.8 3 12.1V4.7z" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <path d="M9.5 5.6l3.2 1.85v3.7L9.5 13 6.3 11.15v-3.7z" fill="currentColor"/>
+</g></defs></svg>
+
+<div class="gate" id="gate">
+  <div class="bloom" aria-hidden="true"></div>
+  <form id="gateForm">
+    <svg class="comb" viewBox="0 0 19 17"><use href="#combg"/></svg>
+    <h1>honeypot<span class="cur"></span></h1>
+    <p>control panel locked</p>
+    <input type="password" id="gatePass" placeholder="password" autocomplete="current-password" required>
+    <button class="btn" data-tone="hot" type="submit">Unlock</button>
+    <div class="err" id="gateErr"></div>
+  </form>
+</div>
+
+<header class="mast">
+  <div class="bar">
+    <div class="wrap" style="display:flex;align-items:center;gap:14px;width:100%">
+      <div class="mark">
+        <svg class="comb" viewBox="0 0 19 17" aria-hidden="true"><use href="#combg"/></svg>
+        <b>honeypot</b>
+      </div>
+      <div class="state" id="mState" data-live="0">
+        <span class="seg"><span class="flag" id="mFlag">BOOT</span></span>
+        <span class="seg" id="mHost"></span>
+        <span class="seg" data-opt id="mNet"></span>
+        <span class="seg" data-opt id="mIp"></span>
+      </div>
+      <button class="btn" id="openSettings">settings</button>
+    </div>
+  </div>
+</header>
+
+<div class="warnbar" id="warnbar" hidden>
+  <div class="wrap">
+    <b>No panel password set.</b>
+    <span>Anyone on this network can disarm the trap or read what it caught.</span>
+    <button class="btn" id="warnFix">Set one now</button>
+  </div>
+</div>
+
+<main>
+  <section class="band wrap" data-boot="1">
+    <div class="bandhead">
+      <div>
+        <div class="eyebrow">what the trap pretends to be</div>
+        <h2>bait</h2>
+      </div>
+      <div class="sub" id="baitSub"></div>
+    </div>
+    <div class="baitgrid" id="baitGrid"></div>
+    <p class="note">Each card is a port and the exact greeting it sends on connect. Click to arm or disarm — takes effect immediately, no restart.</p>
+  </section>
+
+  <section class="band wrap" data-boot="2">
+    <div class="bandhead">
+      <div>
+        <div class="eyebrow">everything the trap recorded</div>
+        <h2>catch</h2>
+      </div>
+      <div class="sub" id="catchSub"></div>
+    </div>
+
+    <div class="stats glass" id="statStrip"></div>
+
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="filter by address, port or text" aria-label="Filter events">
+      <div class="seg-ctl" role="group" aria-label="Severity">
+        <button data-sev="all" aria-pressed="true">all</button>
+        <button data-sev="1" aria-pressed="false">notable</button>
+        <button data-sev="2" aria-pressed="false">alerts</button>
+      </div>
+      <button class="btn" id="btnPause" aria-pressed="false">pause</button>
+      <button class="btn" id="btnCsv">csv</button>
+      <button class="btn" id="btnNdjson">ndjson</button>
+    </div>
+
+    <div class="catchgrid">
+      <div class="panel glass">
+        <h3>activity<span class="tail" id="feedCount"></span></h3>
+        <div class="feedhead">
+          <span class="lbl">listening</span><span class="cur"></span>
+          <span id="feedStatus" style="margin-left:auto"></span>
+        </div>
+        <div id="feed"></div>
+      </div>
+
+      <div class="rail">
+        <div class="panel glass">
+          <h3>last 24 hours</h3>
+          <div class="spark" id="spark"></div>
+          <div class="sparkfoot"><span>-24h</span><span id="sparkPeak"></span><span>now</span></div>
+        </div>
+        <div class="panel glass">
+          <h3>visitors<span class="tail" id="visCount"></span></h3>
+          <div class="rows" id="visitors"></div>
+        </div>
+        <div class="panel glass">
+          <h3>passwords tried</h3>
+          <div class="rows" id="creds"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band wrap" data-boot="3">
+    <div class="bandhead">
+      <div>
+        <div class="eyebrow">what the trap kept</div>
+        <h2>artifacts</h2>
+      </div>
+      <div class="sub" id="artSub"></div>
+    </div>
+    <div class="panel glass">
+      <h3>collected samples<span class="tail" id="artTail"></span></h3>
+      <div id="artList"></div>
+    </div>
+    <p class="note">Samples are stored by SHA-256 and served as inert downloads. Collection is off until you turn it on — fetching a dropper tells its operator this address is live.</p>
+  </section>
+
+  <footer class="colophon wrap" data-boot="4">
+    <span id="fVersion"></span><span id="fChip"></span><span id="fHeap"></span>
+    <span id="fStore"></span><span id="fMac"></span>
+  </footer>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <header>
+    <h2>settings</h2>
+    <button class="btn" id="closeSettings">close</button>
+  </header>
+  <div class="body">
+    <form id="cfgForm">
+      <fieldset>
+        <legend>network</legend>
+        <div class="field">
+          <label for="fSsid">Wi-Fi network</label>
+          <div class="inline">
+            <input id="fSsid" name="ssid" list="ssids" autocomplete="off" placeholder="network name">
+            <button class="btn" type="button" id="btnScan">scan</button>
+          </div>
+          <datalist id="ssids"></datalist>
+        </div>
+        <div class="field">
+          <label for="fWifiPass">Wi-Fi password</label>
+          <input id="fWifiPass" name="wifiPass" type="password" autocomplete="off" placeholder="unchanged">
+          <div class="hint">Stored on the device and never sent back to this page.</div>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="fAlwaysAp" name="alwaysAp">
+          <span class="t">Keep the setup network running
+            <small>Leaves <code>honeypot-setup</code> broadcasting so you can reach the panel even if the Wi-Fi drops.</small></span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>control panel</legend>
+        <div class="field">
+          <label for="fAdminPass">Panel password</label>
+          <input id="fAdminPass" name="adminPass" type="password" autocomplete="new-password" placeholder="unchanged">
+          <div class="hint">Required to open this page. Leave blank to keep the current one.</div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>disguise</legend>
+        <div class="field">
+          <label for="fHostname">Hostname the shell reports</label>
+          <input id="fHostname" name="hostname" placeholder="srv-fileshare">
+          <div class="hint">Pick something that fits the network you put this on. A trap called “honeypot” catches nothing.</div>
+        </div>
+        <div class="field">
+          <label for="fShellUser">Account name attackers land in</label>
+          <input id="fShellUser" name="shellUser" placeholder="admin">
+        </div>
+        <div class="field">
+          <label for="fTz">Time zone</label>
+          <input id="fTz" name="tz" placeholder="UTC0">
+          <div class="hint">POSIX format, e.g. <code>CET-1CEST,M3.5.0,M10.5.0/3</code>. Used for timestamps on captured events.</div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>alerts</legend>
+        <div class="field">
+          <label for="fMode">Send alerts to</label>
+          <select id="fMode" name="notifyMode">
+            <option value="0">nowhere</option>
+            <option value="1">Discord</option>
+            <option value="2">Telegram</option>
+            <option value="3">a JSON endpoint</option>
+            <option value="4">syslog</option>
+          </select>
+        </div>
+        <div class="field" data-when="1 2 3 4">
+          <label for="fUrl" id="lUrl">Webhook URL</label>
+          <input id="fUrl" name="notifyUrl" placeholder="https://…">
+        </div>
+        <div class="field" data-when="2 4">
+          <label for="fExtra" id="lExtra">Chat ID</label>
+          <input id="fExtra" name="notifyExtra">
+        </div>
+        <div class="field" data-when="1 2 3 4">
+          <label for="fMinSev">Alert me about</label>
+          <select id="fMinSev" name="notifyMinSeverity">
+            <option value="0">everything, including port scans</option>
+            <option value="1">logins and commands</option>
+            <option value="2">only credential theft and payload downloads</option>
+          </select>
+        </div>
+        <div class="field" data-when="1 2 3 4">
+          <label for="fCooldown">Minimum seconds between alerts</label>
+          <input id="fCooldown" name="notifyCooldownS" type="number" min="0" max="3600">
+          <div class="hint">A single scan touches every port at once. This stops one visitor from sending you a hundred messages.</div>
+        </div>
+        <button class="btn" type="button" id="btnTest" data-when="1 2 3 4">send a test alert</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>artifacts</legend>
+        <label class="check">
+          <input type="checkbox" id="fCollect" name="collectArtifacts">
+          <span class="t">Collect what attackers try to install
+            <small>When something runs <code>wget</code> or <code>curl</code> in the fake shell, retrieve that file and keep a copy, indexed by SHA-256. The URL alone goes dead within hours; the sample does not.</small></span>
+        </label>
+        <div class="field" data-art>
+          <label for="fArtMax">Largest sample to keep</label>
+          <select id="fArtMax" name="artMaxBytes">
+            <option value="65536">64 KB</option>
+            <option value="262144">256 KB</option>
+            <option value="524288">512 KB</option>
+            <option value="1048576">1 MB</option>
+          </select>
+          <div class="hint">Anything bigger is discarded rather than stored half-complete. Most IoT droppers are well under 100 KB.</div>
+        </div>
+        <div class="field" data-art>
+          <div class="hint" style="margin:0 0 8px">Retrieving a sample makes an outbound request to the attacker's server, which confirms to them that this address is live. Leave this off if the honeypot is meant to stay silent.</div>
+          <button class="btn" type="button" id="btnArtClear" data-tone="danger">delete collected samples</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>storage</legend>
+        <label class="check">
+          <input type="checkbox" id="fLogFlash" name="logToFlash">
+          <span class="t">Write captured events to flash
+            <small>Survives a reboot and can be downloaded later. Turn off to reduce flash wear.</small></span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>device</legend>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" type="button" id="btnClear" data-tone="danger">clear events</button>
+          <button class="btn" type="button" id="btnReboot">restart</button>
+          <button class="btn" type="button" id="btnFactory" data-tone="danger">erase everything</button>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+  <footer>
+    <span class="hint" id="cfgNote"></span>
+    <button class="btn" type="submit" form="cfgForm" data-tone="hot" id="btnSave">save changes</button>
+  </footer>
+</aside>
+
+<div id="toasts"></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const KINDS = {connect:'conn', probe:'probe', login:'login', command:'cmd',
+               download:'payload', disconnect:'close', system:'system'};
+
+let token = sessionStorage.getItem('hp_token') || '';
+let cursor = null, events = [], paused = false, filterSev = 'all', filterText = '';
+let lastState = null;
+
+/* ---------------------------------------------------------------- fetch --*/
+async function api(path, opts = {}) {
+  const headers = Object.assign({}, opts.headers);
+  if (token) headers['X-Auth'] = token;
+  if (opts.body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(path, Object.assign({}, opts, {headers}));
+  if (res.status === 401) { openGate(); throw new Error('unauthorised'); }
+  return res;
+}
+async function apiJson(path, opts) {
+  const res = await api(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  return data;
+}
+
+/* ---------------------------------------------------------------- toast --*/
+function toast(msg, tone) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  if (tone) el.dataset.tone = tone;
+  el.textContent = msg;
+  $('#toasts').append(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s';
+                     setTimeout(() => el.remove(), 320); }, tone === 'bad' ? 5200 : 3200);
+}
+
+/* ----------------------------------------------------------------- gate --*/
+function openGate() { $('#gate').dataset.open = '1'; setTimeout(() => $('#gatePass').focus(), 60); }
+function closeGate() { $('#gate').dataset.open = '0'; }
+
+$('#gateForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#gateErr').textContent = '';
+  try {
+    const d = await (await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: $('#gatePass').value})
+    })).json();
+    if (!d.token) throw new Error(d.error || 'sign in failed');
+    token = d.token;
+    sessionStorage.setItem('hp_token', token);
+    $('#gatePass').value = '';
+    closeGate();
+    tick();
+  } catch (err) { $('#gateErr').textContent = err.message; }
+});
+
+/* ------------------------------------------------------------- format ---*/
+const fmtAgo = ms => {
+  const s = Math.round(ms / 1000);
+  if (s < 5) return 'now';
+  if (s < 60) return s + 's';
+  const m = Math.round(s / 60);
+  if (m < 60) return m + 'm';
+  const h = Math.round(m / 60);
+  return h < 48 ? h + 'h' : Math.round(h / 24) + 'd';
+};
+const fmtBytes = b => b < 1024 ? b + 'B'
+  : b < 1048576 ? (b / 1024).toFixed(0) + 'K' : (b / 1048576).toFixed(1) + 'M';
+const fmtUptime = s => {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}d${h}h` : h ? `${h}h${m}m` : `${m}m`;
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const copy = t => navigator.clipboard?.writeText(t).then(() => toast('copied ' + t));
+
+/* ------------------------------------------------------------- render ----*/
+function renderBait(st) {
+  const cat = st.services.catalogue, hits = st.stats.ports || {};
+  const armed = cat.filter(c => c.armed).length;
+  $('#baitSub').innerHTML = `<b>${armed}</b>/${cat.length} ports armed<br>` +
+    `${st.services.active}/${st.services.slots} sessions open`;
+
+  const max = Math.max(1, ...Object.values(hits));
+  $('#baitGrid').innerHTML = cat.map(c => {
+    const n = hits[c.port] || 0;
+    return `<button class="bait" data-port="${c.port}" data-armed="${c.armed ? 1 : 0}"
+              data-shell="${c.shell ? 1 : 0}" data-hot="${n >= max && n > 0 ? 1 : 0}"
+              aria-pressed="${c.armed}" title="${esc(c.product)}">
+      <span class="pin"></span>
+      <span class="portno">${c.port}</span>
+      <span class="svc">${esc(c.name)}</span>
+      <span class="lie">${esc(c.preview)}</span>
+      <span class="foot">
+        <span class="tag">${c.shell ? '[shell]' : ''}</span>
+        <span class="hits">${n || '—'}</span>
+      </span>
+    </button>`;
+  }).join('');
+}
+
+function renderStats(st) {
+  const s = st.stats, sev = s.severity || {}, k = s.kinds || {};
+  const cells = [
+    ['events', s.total, ''],
+    ['alerts', sev.alert || 0, 'alert'],
+    ['logins', k.login || 0, 'hot'],
+    ['payloads', k.download || 0, 'alert'],
+    ['visitors', (s.visitors || []).length, ''],
+    ['samples', st.artifacts.count, st.artifacts.count ? 'hot' : ''],
+    ['uptime', fmtUptime(st.device.uptimeS), 'ok'],
+  ];
+  $('#statStrip').innerHTML = cells.map(([l, n, tone]) =>
+    `<div class="stat"${tone ? ` data-tone="${tone}"` : ''}><span class="n">${n}</span><span class="l">${l}</span></div>`
+  ).join('');
+}
+
+function renderRail(st) {
+  const vis = (st.stats.visitors || []).slice().sort((a, b) => b.hits - a.hits);
+  const vmax = Math.max(1, ...vis.map(v => v.hits));
+  $('#visCount').textContent = vis.length || '';
+  $('#visitors').innerHTML = vis.length ? vis.slice(0, 12).map(v =>
+    `<div class="row" data-sev="${v.sev}" style="--w:${(v.hits / vmax * 100).toFixed(0)}%">
+       <span class="k" data-copy="${esc(v.ip)}">${esc(v.ip)}</span>
+       <span class="t">${fmtAgo(v.agoMs)}</span>
+       <span class="v">${v.hits}</span></div>`).join('')
+    : `<div class="empty" style="padding:20px"><p>no one yet</p></div>`;
+
+  const creds = (st.stats.creds || []).slice().sort((a, b) => b.n - a.n);
+  const cmax = Math.max(1, ...creds.map(c => c.n));
+  $('#creds').innerHTML = creds.length ? creds.slice(0, 10).map(c =>
+    `<div class="row" style="--w:${(c.n / cmax * 100).toFixed(0)}%">
+       <span class="k" data-copy="${esc(c.v)}">${esc(c.v)}</span>
+       <span class="v">${c.n}</span></div>`).join('')
+    : `<div class="empty" style="padding:20px"><p>nothing has tried to log in</p></div>`;
+
+  const hours = st.stats.hours || [];
+  const hmax = Math.max(1, ...hours);
+  $('#spark').innerHTML = hours.map(h =>
+    `<i data-on="${h ? 1 : 0}" style="height:${h ? Math.max(8, h / hmax * 100) : 4}%" title="${h} events"></i>`).join('');
+  $('#sparkPeak').textContent = hmax > 1 ? 'peak ' + hmax : '';
+}
+
+function renderFeed() {
+  const list = events.filter(e => {
+    if (filterSev !== 'all' && e.sev < +filterSev) return false;
+    if (!filterText) return true;
+    return (e.ip + ' ' + e.port + ' ' + e.kind + ' ' + e.detail).toLowerCase().includes(filterText);
+  }).slice(-300).reverse();
+
+  $('#feedCount').textContent = list.length || '';
+  $('#feedStatus').textContent = paused ? 'paused' : '';
+
+  $('#feed').innerHTML = list.length ? list.map(e =>
+    `<div class="ev" data-sev="${e.sev}" data-new="${e._new ? 1 : 0}">
+       <span class="when">${fmtAgo(e.agoMs + (Date.now() - e._got))}</span>
+       <span class="who" data-copy="${esc(e.ip)}">${e.ip === '0.0.0.0' ? '—' : esc(e.ip)}${e.port ? ':' + e.port : ''}</span>
+       <span class="what"><b>${KINDS[e.kind] || e.kind}</b>${esc(e.detail)}</span>
+     </div>`).join('')
+    : `<div class="empty">
+         <p class="lead">${filterText || filterSev !== 'all' ? 'nothing matches that filter' : 'nothing has touched the trap yet'}</p>
+         <p>${filterText || filterSev !== 'all' ? 'clear the filter to see everything' : 'armed ports will record the first connection here'}</p>
+       </div>`;
+  events.forEach(e => e._new = false);
+}
+
+/* Samples change rarely, so the list is only refetched when the count moves —
+   the 2 s status poll carries just a summary. */
+let artSeenCount = -1, artRows = [];
+async function refreshArtifacts(summary) {
+  if (summary.count === artSeenCount) return;
+  // Advance the marker only after the list actually arrives, or one dropped
+  // request would freeze the panel until the count happens to change again.
+  try { artRows = await apiJson('/api/artifacts'); } catch (err) { return; }
+  artSeenCount = summary.count;
+  renderArtifacts(summary);
+}
+
+function renderArtifacts(summary) {
+  $('#artSub').innerHTML = `<b>${summary.count}</b> samples · ${fmtBytes(summary.bytes)}<br>` +
+    (summary.on ? (summary.failed ? summary.failed + ' fetches failed' : 'collector on')
+                : 'collector off');
+  $('#artTail').textContent = summary.count || '';
+
+  if (!artRows.length) {
+    $('#artList').innerHTML = `<div class="empty">
+      <p class="lead">${summary.on ? 'nothing collected yet' : 'the collector is off'}</p>
+      <p>${summary.on
+            ? 'the next time something runs wget or curl in the shell, the file lands here'
+            : 'turn it on in settings to keep copies of what attackers try to install'}</p></div>`;
+    return;
+  }
+
+  $('#artList').innerHTML = artRows.slice().reverse().map(a => `
+    <div class="art">
+      <span><span class="kind">${esc(a.kind)}</span><span class="size">${fmtBytes(a.size)}</span>${
+        a.seen > 1 ? `<span class="seen">seen ×${a.seen}</span>` : ''}</span>
+      <button class="btn dl" data-sha="${esc(a.sha)}">download</button>
+      <span class="sha" data-copy="${esc(a.sha)}">${esc(a.sha)}</span>
+      <span class="src" data-copy="${esc(a.url)}">${esc(a.url)}</span>
+      <span class="from">requested by ${esc(a.ip)}${a.ts ? ' · ' + new Date(a.ts * 1000).toLocaleString() : ''}</span>
+    </div>`).join('');
+}
+
+function renderMast(st) {
+  const online = st.net.online;
+  $('#mState').dataset.live = online ? '1' : '0';
+  $('#mFlag').textContent = online ? 'ARMED' : (st.net.ap ? 'SETUP' : 'OFFLINE');
+  $('#mHost').textContent = st.device.hostname;
+  $('#mNet').textContent = online ? `${st.net.ssid} ${st.net.rssi}dBm` : (st.net.ap ? 'honeypot-setup' : '—');
+  $('#mIp').textContent = online ? st.net.ip : (st.net.apIp || '');
+  $('#warnbar').hidden = st.authRequired;
+
+  $('#catchSub').innerHTML = `<b>${st.stats.total}</b> events recorded<br>` +
+    `${st.alerts.mode ? st.alerts.sent + ' alerts sent' : 'alerts off'}` +
+    `${st.services.throttled ? ' · ' + st.services.throttled + ' throttled' : ''}`;
+
+  const d = st.device;
+  $('#fVersion').textContent = 'honeypot ' + d.version;
+  $('#fChip').textContent = d.chip + (d.psram ? ' ' + Math.round(d.psram / 1048576) + 'MB psram' : '');
+  $('#fHeap').textContent = 'heap ' + fmtBytes(d.heapFree) + ' low ' + fmtBytes(d.heapMin);
+  $('#fStore').textContent = 'log ' + fmtBytes(d.logBytes) + '/' + fmtBytes(d.fsTotal);
+  $('#fMac').textContent = st.net.mac;
+}
+
+/* ------------------------------------------------------------------ poll -*/
+async function tick() {
+  try {
+    const st = await apiJson(cursor === null ? '/api/state' : '/api/state?cursor=' + cursor);
+    lastState = st;
+    if (st.events.length) {
+      const fresh = cursor !== null;
+      st.events.forEach(e => { e._got = Date.now(); e._new = fresh; });
+      events = events.concat(st.events).slice(-600);
+    }
+    cursor = st.cursor;
+    renderMast(st); renderBait(st); renderStats(st); renderRail(st);
+    refreshArtifacts(st.artifacts);
+    if (!paused) renderFeed();
+  } catch (err) { /* gate handles auth; transient errors just retry */ }
+}
+
+let timer = null;
+function schedule() {
+  clearInterval(timer);
+  // Stop polling when the tab is hidden — the device has better things to do.
+  if (!document.hidden) { tick(); timer = setInterval(tick, 2000); }
+}
+document.addEventListener('visibilitychange', schedule);
+
+/* -------------------------------------------------------------- controls -*/
+document.addEventListener('click', e => {
+  const dl = e.target.closest('.dl[data-sha]');
+  if (dl) { downloadSample(dl.dataset.sha); return; }
+
+  const c = e.target.closest('[data-copy]');
+  if (c) { copy(c.dataset.copy); return; }
+
+  const bait = e.target.closest('.bait');
+  if (bait && lastState) {
+    const port = +bait.dataset.port;
+    const armed = bait.dataset.armed === '1';
+    const ports = lastState.services.catalogue.filter(x => x.armed).map(x => x.port);
+    const next = armed ? ports.filter(p => p !== port) : ports.concat(port);
+    bait.dataset.armed = armed ? '0' : '1';           // optimistic
+    apiJson('/api/config', {method: 'POST', body: JSON.stringify({ports: next})})
+      .then(() => { toast(`port ${port} ${armed ? 'disarmed' : 'armed'}`); tick(); })
+      .catch(err => { bait.dataset.armed = armed ? '1' : '0'; toast(err.message, 'bad'); });
+  }
+});
+
+$$('.seg-ctl button').forEach(b => b.addEventListener('click', () => {
+  $$('.seg-ctl button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  filterSev = b.dataset.sev;
+  renderFeed();
+}));
+$('#q').addEventListener('input', e => { filterText = e.target.value.trim().toLowerCase(); renderFeed(); });
+$('#btnPause').addEventListener('click', e => {
+  paused = !paused;
+  e.target.setAttribute('aria-pressed', paused);
+  e.target.textContent = paused ? 'resume' : 'pause';
+  if (!paused) renderFeed(); else $('#feedStatus').textContent = 'paused';
+});
+
+async function download(fmt) {
+  try {
+    const res = await api('/api/export?fmt=' + fmt);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'honeypot-events.' + fmt;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) { toast('download failed', 'bad'); }
+}
+$('#btnCsv').addEventListener('click', () => download('csv'));
+$('#btnNdjson').addEventListener('click', () => download('ndjson'));
+
+async function downloadSample(sha) {
+  try {
+    const res = await api('/api/artifact?sha=' + encodeURIComponent(sha));
+    if (!res.ok) throw new Error('sample not found');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = sha + '.sample';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('saved ' + sha.slice(0, 16) + '.sample');
+  } catch (err) { toast(err.message, 'bad'); }
+}
+
+/* -------------------------------------------------------------- settings -*/
+function openDrawer() {
+  $('#drawer').dataset.open = '1';
+  $('#drawer').setAttribute('aria-hidden', 'false');
+  $('#scrim').dataset.open = '1';
+  loadConfig();
+}
+function closeDrawer() {
+  $('#drawer').dataset.open = '0';
+  $('#drawer').setAttribute('aria-hidden', 'true');
+  $('#scrim').dataset.open = '0';
+}
+$('#openSettings').addEventListener('click', openDrawer);
+$('#closeSettings').addEventListener('click', closeDrawer);
+$('#scrim').addEventListener('click', closeDrawer);
+$('#warnFix').addEventListener('click', () => { openDrawer(); setTimeout(() => $('#fAdminPass').focus(), 330); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+function syncModeFields() {
+  const m = $('#fMode').value;
+  $$('[data-when]').forEach(el => { el.style.display = el.dataset.when.split(' ').includes(m) ? '' : 'none'; });
+  const syslog = m === '4';
+  $('#lUrl').textContent = syslog ? 'Collector address' : 'Webhook URL';
+  $('#fUrl').placeholder = syslog ? '10.0.0.5' : 'https://…';
+  $('#lExtra').textContent = syslog ? 'UDP port' : 'Chat ID';
+  $('#fExtra').placeholder = syslog ? '514' : '';
+}
+$('#fMode').addEventListener('change', syncModeFields);
+
+// The size limit and the delete control are meaningless while collection is off.
+function syncArtFields() {
+  const on = $('#fCollect').checked;
+  $$('[data-art]').forEach(el => { el.style.display = on ? '' : 'none'; });
+}
+$('#fCollect').addEventListener('change', syncArtFields);
+
+$('#btnArtClear').addEventListener('click', async () => {
+  if (!confirm('Delete every collected sample from the device?')) return;
+  try {
+    await apiJson('/api/artifacts/clear', {method: 'POST'});
+    artSeenCount = -1; artRows = [];
+    toast('collected samples deleted');
+    tick();
+  } catch (err) { toast(err.message, 'bad'); }
+});
+
+async function loadConfig() {
+  try {
+    const c = await apiJson('/api/config');
+    $('#fSsid').value = c.ssid || '';
+    $('#fHostname').value = c.hostname || '';
+    $('#fShellUser').value = c.shellUser || '';
+    $('#fTz').value = c.tz || '';
+    $('#fMode').value = c.notifyMode;
+    $('#fUrl').value = c.notifyUrl || '';
+    $('#fExtra').value = c.notifyExtra || '';
+    $('#fMinSev').value = c.notifyMinSeverity;
+    $('#fCooldown').value = c.notifyCooldownS;
+    $('#fAlwaysAp').checked = !!c.alwaysAp;
+    $('#fLogFlash').checked = !!c.logToFlash;
+    $('#fCollect').checked = !!c.collectArtifacts;
+    $('#fArtMax').value = c.artMaxBytes;
+    syncArtFields();
+    $('#fWifiPass').placeholder = c.wifiPassSet ? 'unchanged' : 'not set';
+    $('#fAdminPass').placeholder = c.adminPassSet ? 'unchanged' : 'not set — panel is open';
+    $('#cfgNote').textContent = '';
+    syncModeFields();
+  } catch (err) { toast(err.message, 'bad'); }
+}
+
+$('#cfgForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const body = {
+    ssid: $('#fSsid').value.trim(),
+    hostname: $('#fHostname').value.trim(),
+    shellUser: $('#fShellUser').value.trim(),
+    tz: $('#fTz').value.trim(),
+    notifyMode: +$('#fMode').value,
+    notifyUrl: $('#fUrl').value.trim(),
+    notifyExtra: $('#fExtra').value.trim(),
+    notifyMinSeverity: +$('#fMinSev').value,
+    notifyCooldownS: +$('#fCooldown').value || 0,
+    alwaysAp: $('#fAlwaysAp').checked,
+    logToFlash: $('#fLogFlash').checked,
+    collectArtifacts: $('#fCollect').checked,
+    artMaxBytes: +$('#fArtMax').value,
+  };
+  // Empty password fields mean "leave it alone", never "clear it".
+  if ($('#fWifiPass').value) body.wifiPass = $('#fWifiPass').value;
+  if ($('#fAdminPass').value) body.adminPass = $('#fAdminPass').value;
+
+  $('#btnSave').disabled = true;
+  try {
+    const r = await apiJson('/api/config', {method: 'POST', body: JSON.stringify(body)});
+    $('#fWifiPass').value = ''; $('#fAdminPass').value = '';
+    toast(r.rebootNeeded ? 'saved — restart to join the new network' : 'saved');
+    if (body.adminPass) { sessionStorage.removeItem('hp_token'); token = ''; openGate(); }
+    loadConfig(); tick();
+  } catch (err) { toast(err.message, 'bad'); }
+  $('#btnSave').disabled = false;
+});
+
+$('#btnScan').addEventListener('click', async e => {
+  e.target.disabled = true; e.target.textContent = 'scanning';
+  try {
+    const nets = await apiJson('/api/scan');
+    $('#ssids').innerHTML = nets.map(n => `<option value="${esc(n.ssid)}">${n.rssi} dBm</option>`).join('');
+    toast(nets.length + ' networks found');
+  } catch (err) { toast(err.message, 'bad'); }
+  e.target.disabled = false; e.target.textContent = 'scan';
+});
+
+$('#btnTest').addEventListener('click', async e => {
+  e.target.disabled = true;
+  try { await apiJson('/api/test-alert', {method: 'POST'}); toast('test alert delivered'); }
+  catch (err) { toast(err.message, 'bad'); }
+  e.target.disabled = false;
+});
+
+$('#btnClear').addEventListener('click', async () => {
+  if (!confirm('Delete every captured event? This cannot be undone.')) return;
+  try {
+    await apiJson('/api/clear-log', {method: 'POST'});
+    events = []; cursor = null; renderFeed();
+    toast('captured events cleared');
+  } catch (err) { toast(err.message, 'bad'); }
+});
+$('#btnReboot').addEventListener('click', async () => {
+  if (!confirm('Restart the device?')) return;
+  try { await apiJson('/api/reboot', {method: 'POST'}); } catch (e) {}
+  toast('restarting — this page will reconnect on its own');
+});
+$('#btnFactory').addEventListener('click', async () => {
+  if (!confirm('Erase the Wi-Fi settings, the panel password and every captured event?')) return;
+  try { await apiJson('/api/reset', {method: 'POST'}); } catch (e) {}
+  toast('erased — restarting into setup mode');
+});
+
+/* Keep relative timestamps honest without re-fetching. */
+setInterval(() => { if (!paused && events.length) renderFeed(); }, 15000);
+
+schedule();
+</script>
+</body>
+</html>
