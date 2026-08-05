@@ -1,198 +1,137 @@
-<div align="center">
+# ESP32 Honeypot
 
-## M5Stack NanoC6 ESP32 Honeypot
+A multi-port honeypot for ESP32 that impersonates a small Linux file server,
+records what attackers type, retrieves the malware they try to install, and
+shows all of it in a control panel served from the device itself.
 
-<img alt="logo" src="./m5nanohoney.png" width="33%" height="33%"/>
-  
-This project is a standalone Multi-port honeypot for NanoC6 and ESP32 platform. It emulates a realistic Linux shell environment on telnet and multiple port banner to attract and analyze unauthorized access attempts. It features a full web-based configuration UI, persistent storage using SPIFFS, and webhook-based alerting that can be integrated with Discord, Telegram, Signal, WhatsApp, or SIEM platforms like ELK.
-  
-  Here the demo video on Evil-Cardputer:
-  
-  <a href="https://youtube.com/shorts/P73wcEghjso" >
-      <img alt="Demo Video" src="https://img.youtube.com/vi/P73wcEghjso/0.jpg" width="33%" height="33%"/>
-  </a>
+**→ [`ESP32-Honeypot-v2/`](ESP32-Honeypot-v2/) is the current version.** Full
+documentation, API reference and troubleshooting live in
+[its README](ESP32-Honeypot-v2/README.md).
 
-Thanks to hosseios for the video ! 
+Every screenshot below is the real firmware running on an **ESP32-S3-N16R8**
+(16 MB flash, 8 MB octal PSRAM), showing live capture data.
 
-
-<table>
-  <tr>
-    <td align="center">
-      <strong>Web Interface (WebUI)</strong><br>
-      <img src="./WebUi-1.png" width="300px">
-    </td>
-    <td align="center">
-      <strong>What an Attacker Sees (Nmap Scan)</strong><br>
-      <img src="./nmap.png" width="900px">
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <strong>Real-time Alerts on Discord</strong><br>
-      <img src="./WebHookDiscord.jpg" width="200px">
-    </td>
-    <td align="center">
-      <strong>5 Days of ELK Data Collection</strong><br>
-      <img src="./honeypot.png" width="900px">
-    </td>
-  </tr>
-</table>
-
-</div>
+![Dashboard](ESP32-Honeypot-v2/docs/dashboard.png)
 
 ---
 
-## ✅ Features
+## Default credentials
 
-- Interactive Telnet honeypot server on port 23
-- Fake file system structure with secrets to lure attackers
-- Realistic Linux shell simulation with multiple commands supported (pwd, whoami, cat, ls, cd, apt, etc.)  
-- Banner grabbing for port 21,22,25,53,110,143,443,445,3306,3389,5900,8080  
-- Automatic logging of all client inputs with timestamp and IP address
-- Webhooks for real-time alerts (Discord, Telegram, Signal, WhatsApp, SIEM, etc.)
-- Web-based configuration panel (SSID, password, port selection and webhook configuration)
-- SPIFFS-based file system for persistent config and logs
-- Modular code, compatible with any ESP32 board
+| What | Value |
+|---|---|
+| Setup network (SSID) | `honeypot-setup` |
+| Setup network password | `trapdoor123` |
+| Panel URL, setup mode | `http://192.168.4.1/` |
+| Panel URL, on your LAN | `http://srv-fileshare.local/` or the DHCP address |
+| **Panel password** | **none — unset on first boot, set it during setup** |
+| Fake shell login | **any username and password are accepted, by design** |
 
----
-## 🧩 Compatible Devices
+Change the AP credentials in `ESP32-Honeypot-v2/src/main.cpp` (`AP_SSID` / `AP_PASS`).
 
-Tested and confirmed working on:
+## Quick start
 
-- **Atom C6** (one of the smallest): [Buy here](https://shop.m5stack.com/products/m5stack-nanoc6-dev-kit?ref=7h30th3r0n3)
-- **M5Stack AtomS3**: [Buy here](https://s.click.aliexpress.com/e/_DnDXSKJ) or [Buy here](https://shop.m5stack.com/products/atoms3-dev-kit-w-0-85-inch-screen?ref=7h30th3r0n3)
-- **M5Stack Atom Lite**: [Buy here](https://s.click.aliexpress.com/e/_Dm0e95D)
-- **ESP32-C3** (with external antenna): [Buy here](https://s.click.aliexpress.com/e/_DD1yibp) (Be carefull to select sets WITH antenna) 
-
-Any ESP32 Dev Board should work (e.g. DevKitC, NodeMCU-32S, Wemos D1 R32)  
-please report no working devices 
-
----
-
-## ⚙️ Installation
-
-1. Flash this firmware on any ESP32 using Arduino IDE or PlatformIO
-2. On first boot, ESP32 will create a Wi-Fi access point:
-   - SSID: HoneypotConfig
-   - Password: HoneyPotConfig123
-3. Connect and open `http://192.168.4.1` to configure
-4. After saving the configuration, the ESP32 will reboot and connect to your Wi-Fi
-5. Telnet honeypot starts on port 23, listening for attackers
-6. All captured inputs will be logged and optionally sent to your webhook
-
-If the AP is not near it, mode configuration is enabled and web portal is accessible.
-
-Note : NanoC6 can be put in configuration mode by olding the button when the white light is ON at boot.
-
---- 
-
-## 🌳 LED Behavior Decision Tree for NanoC6
-
-```
-                        🔵 Device Boot
-                              │
-                              v
-                    ⚪ LED: White (3 seconds)
-                              │
-                              v
-                   Is Button A stay pressed?
-                        /           \
-                       /             \
-                ⬅️ No                  Yes ➡️
-           🌈 LED Rainbow        🔵 LED Blue (WebUI configuration Mode)
-                  │
-                  v
-        Try connecting to Wi-Fi
-                  │
-                  v
-         Wi-Fi connection success?
-              /              \
-             /                \
-        ⬅️ No                   Yes ➡️
- 🔵 LED Blue flashing ×3    🟩 LED Green (Honeypot Active)
-      then fix blue               │
-(WebUI configuration Mode)        |
-                                  v
-                       Incoming connection?
-                             /        \
-                            /          \
-                       ⬅️ No             Yes ➡️
-                    (Stay Green)   🔴 LED Red flashes ×2
-                                          then Red fixed
+```bash
+cd ESP32-Honeypot-v2
+pio run -e esp32s3 -t upload && pio device monitor
 ```
 
----
+Join `honeypot-setup` / `trapdoor123`, open `http://192.168.4.1/`, enter your
+Wi-Fi details and **set a panel password**. The device joins your network and
+arms the trap; the panel stays reachable while it runs.
 
-## 📦 Dependencies
-
-- ESPAsyncWebServer
-- ArduinoJson
-- SPIFFS (built-in)
-- WiFi (built-in)
-
-Make sure to install the required libraries via Library Manager or PlatformIO.
+Environments: `esp32s3`, `esp32dev`, `atoms3`.
 
 ---
 
-## 📁 SPIFFS Structure
+## The control panel
 
-/config.json       → Contains Wi-Fi and webhook settings  
-/honeypot_logs.txt → Stores captured login attempts and commands  
-/index.html        → Web-based configuration UI  
+**Bait** shows one card per port with the *exact greeting that port sends on
+connect* — the thing an attacker actually reads off the wire. Click a card to
+arm or disarm it; it takes effect immediately, no reboot.
 
-All files are automatically created at first boot if missing.
+**Catch** is everything recorded, live — filterable, exportable as NDJSON or CSV.
 
----
+![Catch](ESP32-Honeypot-v2/docs/catch.png)
 
-## 📡 Webhook Format
+Colour carries meaning rather than decoration: **green is nominal**, **orange is
+live/armed**, **red is an alert** — credential theft, a dropper URL, a path
+traversal attempt.
 
-Example payload (JSON, sent as POST):
+### Artifacts
 
-{
-  "content": "📡 Honeypot\n🔍 IP: 192.168.1.5\n💻 Command: `cat /etc/passwd`"
-}
+When something runs `wget`/`curl`/`tftp` in the fake shell, the collector
+retrieves the file, hashes it with SHA-256, identifies the target architecture
+from its ELF header, deduplicates and stores it for download. The URL dies within
+hours; the sample does not.
 
-You can route this to:
+![Artifacts](ESP32-Honeypot-v2/docs/artifacts.png)
 
-- Discord (via Webhook URL)
-- Telegram (via Bot API Gateway)
-- Signal (via relay server or bridge)
-- WhatsApp (via Business API)
-- SIEMs or custom log collectors
+**Off by default** — fetching a dropper confirms to its operator that your
+address is live.
 
----
+### Settings and mobile
 
-## 🧠 Emulated Commands
-
-Basic commands:
-- pwd, whoami, uptime, hostname, uname -a, id, lscpu, df -h, free -h, env, set, history
-
-Filesystem:
-- ls, ls -l, cd, cat, mkdir, rm, rmdir, touch, chmod, chown
-
-Networking:
-- ifconfig, ip addr, ping, netstat -an, curl, wget
-
-Services:
-- service <name> start/stop/status
-- systemctl status/start/stop
-
-Package manager:
-- apt-get update, apt-get install
-
-Privilege escalation:
-- sudo (with denial)
-
-Fake files like `/etc/passwd`, `secrets.txt`, `mysql_credentials.txt`, etc. are included to bait the attacker.
+<p>
+<img src="ESP32-Honeypot-v2/docs/settings.png" width="49%" alt="Settings">
+<img src="ESP32-Honeypot-v2/docs/mobile.png" width="24%" alt="Mobile layout">
+</p>
 
 ---
 
-## 🛡️ Usage Notes
+## Verified against nmap
 
-This honeypot is designed for educational and defensive cybersecurity purposes. Do not expose to the internet without proper upstream firewalling or network segmentation. It is not intended to replace full honeynet frameworks like Cowrie, but serves as a lightweight ESP32-based trap canary.
+Real `nmap -sT -sV` against the device, 8 ports armed:
+
+```
+21/tcp   open  ftp
+22/tcp   open  ssh      OpenSSH 8.9p1 Ubuntu 3ubuntu0.5 (Ubuntu Linux; protocol 2.0)
+23/tcp   open  telnet
+25/tcp   open  smtp     Postfix smtpd
+445/tcp  open  microsoft-ds?
+3306/tcp open  mysql    MySQL 8.0.35-0ubuntu0.22.04.1
+3389/tcp open  tcpwrapped
+8080/tcp open  http     Apache httpd 2.4.52 ((Ubuntu))
+```
+
+Only 8 ports can be armed at once. The Arduino core is compiled with
+`CONFIG_LWIP_MAX_SOCKETS=16`, so every listener costs a socket an accepted
+connection then cannot have — arm 14 and `accept()` starves, which a scanner
+reports as `tcpwrapped` on everything. See
+[the socket ceiling](ESP32-Honeypot-v2/README.md#the-socket-ceiling).
+
+## Highlights over v1
+
+- Non-blocking connection pool on a dedicated task — v1 ran an infinite loop
+  inside `setup()`, and one idle telnet connection froze every port.
+- The control panel runs permanently, with token auth and validated writes.
+  v1 served the Wi-Fi password in plaintext to unauthenticated clients.
+- Mirai-aware telnet: the busybox loader probe is answered byte-accurately, so
+  the loader proceeds to the payload stage instead of hanging up.
+- Artifact collector, conversational FTP/SMTP/POP3/IMAP/Redis that capture
+  credentials, NTP timestamps, rotating NDJSON logs, non-blocking alerts
+  (Discord / Telegram / JSON / syslog).
+
+The full list of twelve v1 issues and their fixes is in the
+[v2 README](ESP32-Honeypot-v2/README.md#what-changed-from-v1).
 
 ---
 
-## 📄 License
+## Repository layout
 
-MIT License - Use freely with attribution.
+```
+ESP32-Honeypot-v2/     current version — PlatformIO project
+ESP32-C5-Honeypot/     ESP-IDF port for the ESP32-C5
+ESP32-Honeypot.ino     v1, generic ESP32
+NanoC6-Honeypot.ino    v1, M5Stack NanoC6
+AtomS3-Honeypot.ino    v1, M5Stack AtomS3
+```
+
+## Credits
+
+Original project by [7h30th3r0n3](https://github.com/7h30th3r0n3/ESP32-Honeypot).
+The v1 sketches and the C5 port above are from that work. MIT, as the original.
+
+## Usage
+
+This is a canary for a network you control. Do not expose it to the internet
+without upstream filtering — it is a lightweight trap, not Cowrie.
