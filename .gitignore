@@ -1,5 +1,6 @@
-/ESP32-C5-Honeypot/build
-
 # PlatformIO
 .pio/
-ESP32-Honeypot-v2/.pio/
+
+# Editors
+.vscode/
+.idea/
