@@ -562,3 +562,9 @@ knocking and what they try to install.
 MIT. Began as a rewrite of
 [7h30th3r0n3/ESP32-Honeypot](https://github.com/7h30th3r0n3/ESP32-Honeypot);
 no original code remains.
+
+## Support
+
+If this saved you some time, you can buy me a coffee.
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black&labelColor=1a1a1a)](https://buymeacoffee.com/sx8yfh9zrbs)
