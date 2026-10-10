@@ -25,7 +25,7 @@ enum EventKind : uint8_t {
 enum Severity : uint8_t {
   SEV_INFO = 0,     // someone knocked
   SEV_NOTICE,       // someone is poking around
-  SEV_ALERT         // credential theft, dropper URL, known botnet signature
+  SEV_ALERT         // any probe, credential theft, dropper URL, botnet signature
 };
 
 static const uint8_t HP_DETAIL_LEN = 168;

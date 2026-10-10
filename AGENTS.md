@@ -1,0 +1,1 @@
+* the ai can't directly program the attached devboard - ask the human dev to do that.

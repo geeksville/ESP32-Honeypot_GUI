@@ -400,7 +400,7 @@ static void pumpText(Conn& c) {
       c.line = String();
       line.trim();
       if (!line.length()) continue;
-      if (!c.quiet) evLog(EV_PROBE, SEV_NOTICE, c.ip, c.def->port, "%s", hpSanitize(line, 120).c_str());
+      if (!c.quiet) evLog(EV_PROBE, SEV_ALERT, c.ip, c.def->port, "%s", hpSanitize(line, 120).c_str());
       if (!respondText(c, line)) { closeConn(c, "peer quit"); return; }
       continue;
     }
@@ -542,16 +542,17 @@ static void pumpProbe(Conn& c) {
   switch (c.def->kind) {
     case SVC_DNS:
       sendDns(c, buf, n);
-      if (!c.quiet) evLog(EV_PROBE, SEV_NOTICE, c.ip, c.def->port, "DNS query, %u bytes", (unsigned)n);
+      if (!c.quiet) evLog(EV_PROBE, SEV_ALERT, c.ip, c.def->port, "DNS query, %u bytes", (unsigned)n);
       c.state = C_LINGER;
       break;
 
     case SVC_HTTP: {
       String req = describeProbe(buf, n);
-      // Path traversal and shell-injection attempts in a URL are worth flagging.
+      // Path traversal and shell-injection attempts in a URL are worth flagging
+      // even when the rate limiter has gone quiet on this host.
       bool nasty = req.indexOf("..") >= 0 || req.indexOf("${") >= 0 ||
                    req.indexOf("/bin/") >= 0 || req.indexOf("cgi-bin") >= 0;
-      if (!c.quiet || nasty) evLog(EV_PROBE, nasty ? SEV_ALERT : SEV_NOTICE, c.ip, c.def->port,
+      if (!c.quiet || nasty) evLog(EV_PROBE, SEV_ALERT, c.ip, c.def->port,
                                    "%s", req.substring(0, 140).c_str());
       sendHttp(c);
       c.state = C_LINGER;
@@ -559,7 +560,7 @@ static void pumpProbe(Conn& c) {
     }
 
     default:
-      if (!c.quiet) evLog(EV_PROBE, SEV_NOTICE, c.ip, c.def->port, "%s", describeProbe(buf, n).c_str());
+      if (!c.quiet) evLog(EV_PROBE, SEV_ALERT, c.ip, c.def->port, "%s", describeProbe(buf, n).c_str());
       if (c.def->kind == SVC_BANNER) c.state = C_LINGER;
       break;
   }
