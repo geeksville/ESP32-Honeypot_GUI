@@ -1,0 +1,129 @@
+{
+	"name": "PlatformIO (Community)",
+	"build": {
+		"dockerfile": "Containerfile",
+		"context": ".",
+		"args": {
+			"FEDORA_COMPAT" : "1", // enables fedora compatibility mode (extra dialout group with gid 18)
+			"VARIANT": "25.04"
+		}
+	},
+	"remoteUser": "ubuntu",
+	"containerUser": "ubuntu",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"terminal.integrated.defaultProfile.linux": "zsh"
+			},
+			"extensions": [
+				"ms-vscode.cpptools",
+				"skellock.just",
+				"saoudrizwan.claude-dev",
+				"platformio.platformio-ide"
+			]
+		}
+	},
+	"forwardPorts": [
+		8008
+	],
+	"mounts": [
+		"source=/dev/,target=/host/dev/,type=bind,consistency=consistent",
+		"source=/run/user/1000,target=/run/user/1000,type=bind",
+
+		// vscode auto export of git config into my container sometimes seems busted (I'm not sure why this is only needed sometimes)
+		"source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/home/ubuntu/.gitconfig,type=bind,consistency=cached",
+
+		// It is handy to have some test images available in the container
+		//"source=${localEnv:HOME}/Pictures/telescope,target=/workspaces/starbash/images,type=bind,consistency=cached",
+		//"source=/mnt/kshared,target=/mnt/kshared,type=bind,consistency=cached",
+		// This is necessary to prevent newer vscode created images from being able to write to /tmp
+		"type=tmpfs,destination=/tmp,tmpfs-mode=1777",
+		// My external USB drive
+		//"source=/mnt/fast_stick,destination=/mnt/fast_stick,type=bind"
+
+		// Atuin Identity: Read-only mount of your encryption key
+		"source=${localEnv:HOME}/.local/share/atuin/key,target=/home/ubuntu/.local/share/atuin/key,type=bind,consistency=cached,readonly",
+		// Atuin Config: Read-only mount of your config (contains username/server)
+		"source=${localEnv:HOME}/.config/atuin/config.toml,target=/home/ubuntu/.config/atuin/config.toml,type=bind,consistency=cached,readonly",
+		// AtuinPersistence: A Named Volume to store the session/db so it survives rebuilds
+		"source=atuin-session-${localWorkspaceFolderBasename},target=/home/ubuntu/.local/share/atuin,type=volume",
+
+		// This isn't needed - much better to just pass in the XAUTHORITY env var (because this filename keeps changing)
+		// Mount the X11 authority file to allow GUI apps in the container to connect to the host's display
+		//"source=${localEnv:XAUTHORITY},target=${localEnv:XAUTHORITY},type=bind",
+
+		// NOTE: None of the following are allowed in GitHub CI devcontainers
+		// Needed for x11 forwarding, but throws: invalid mount config for type "bind": bind source path does not exist: /run/user/1000
+		//"source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
+		// on github CI.
+		//{
+		//	// was ${env:XAUTHORITY} but that file keeps changing, so just mount a temp file and have fix-xauth.sh update it
+		//	"source": "${localEnv:HOME}/myxauth.lnk",
+		//	"target": "/tmp/.docker.xauth",
+		//	"type": "bind"
+		//},
+        // let container see host dbus, so that flatpak can work inside
+        "source=/run/dbus,target=/run/dbus,type=bind"
+	],
+	"runArgs": [
+		"--hostname=dc_${localWorkspaceFolderBasename}", // Use a better hostname than random digits
+		"--privileged", // Allow full hw access from host, also allows writing core dump files
+		"--network=host", // Use host network rather than our bridged container network (provides mDNS access)
+		"--ipc=host", // Needed to make python SharedMemory work
+		"--user=1000:1000",
+		// Recommended https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.2.0/how-to/docker.html
+		"--security-opt=seccomp=unconfined",
+		// Not needed for now
+		// "--ulimit=core=-1:-1" // Allow core dumps
+		// NOTE: Not allowed in github CI devcontainers
+		"--userns=keep-id:uid=1000,gid=1000",
+		// Allow container to access host ports via host.docker.internal
+		"--add-host=host.docker.internal:host-gateway"
+		// We pre-create this data-only container in initializeCommand
+		//"--volumes-from=starbash-test-data:ro"
+	],
+	"features": {
+		// add git
+		"ghcr.io/devcontainers/features/git:1": {},
+		// Rust is installed via rustup directly in the Containerfile (see
+		// the `curl ... sh.rustup.rs` step). The ghcr.io rust feature is
+		// not used because it runs `apt-get update` on top of the already-
+		// built image and fails on Ubuntu 25.04 with "Could not execute
+		// 'gpgv'" (the feature's install script wipes apt lists state).
+		// add the github cli tool (gh)
+		// "ghcr.io/devcontainers/features/github-cli:1": {}
+		// https://just.systems/ — task runner used by ./Justfile
+		"ghcr.io/guiyomh/features/just:0": {}
+	},
+	// "postAttachCommand": "sudo service udev restart",
+	"initializeCommand": "sudo chown -R 1000 /dev/bus/usb",
+	// Runs once after the container is created (and after every rebuild).
+	// Restores per-workspace state that doesn't live in the image: the
+	// app/ Poetry venv (Poetry stores venvs in ~/.cache/pypoetry, which
+	// is wiped on rebuild). See `just container-init`.
+	//"postCreateCommand": "just init",
+	// X11 forwarding: use the host display directly via the mounted /tmp/.X11-unix sockets.
+	// XAUTHORITY points to the mounted host auth file (kept up to date by fix-xauth.sh on the host).
+	// DISPLAY :0 is the host display; VSCode may override with its own tunnel but Qt needs the real one.
+	"remoteEnv": {
+		"DISPLAY": ":0",
+		"XAUTHORITY": "/tmp/.docker.xauth",
+
+		// Project-scoped Cline MCP servers: keep the list in the repo (.cline/cline_mcp_settings.json)
+		// instead of the global ~/.cline/data/settings/cline_mcp_settings.json.
+		// The Cline extension resolves its MCP settings path from CLINE_MCP_SETTINGS_PATH in its
+		// extension-host env; remoteEnv is applied to the dev container's VS Code server (which hosts
+		// the extension), unlike terminal.integrated.env.* which only affects terminals.
+		// NOTE: this *replaces* the global file - Cline loads exactly one settings file, so every
+		// server wanted in this workspace must be listed there (there is no global+project merge).
+		// Requires a container rebuild / reopen to take effect.
+		// CLINE_MCP_SETTINGS_PATH is only honored by the 'next' (SDK) bundle - the 'legacy'
+		// bundle has no reference to it at all, and would silently fall back to the global
+		// file. Cline A/B-rolls between the two (CLINE_BUNDLE_OVERRIDE env var, then the
+		// 'bundleOverride' setting, then the ext-sdk-bundle-rollout feature flag, defaulting
+		// to 'legacy'), so pin the bundle to keep the project MCP config working. Accepted
+		// values are exactly "next" / "legacy"; anything else is ignored.
+		"CLINE_MCP_SETTINGS_PATH": "${containerWorkspaceFolder}/.cline/cline_mcp_settings.json",
+		"CLINE_BUNDLE_OVERRIDE": "next"
+	}
+}

@@ -1,0 +1,144 @@
+ARG VARIANT=25.04
+FROM ubuntu:${VARIANT}
+
+ENV DEBIAN_FRONTEND=noninteractive
+# Ubuntu 23.04+ pre-creates an `ubuntu` user at uid/gid 1000; reuse it as
+# our dev user rather than creating a separate `vscode`. The host bind
+# mounts assume uid 1000 either way.
+ARG USERNAME=ubuntu
+
+# The plain ubuntu image doesn't ship sudo, curl, zsh, or git out of the box,
+# but every later step in this Containerfile assumes they're present.
+# gpgv is needed by apt for signature verification (separate from gnupg).
+RUN apt-get update \
+ && apt-get -y install --no-install-recommends \
+      sudo curl ca-certificates zsh git locales gnupg gpgv \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
+ && sudo apt-get -y install --no-install-recommends \
+      clang \
+      python3-venv \
+      udev sudo python3 python3-pip python3-venv python-is-python3 \
+      `# Native libs needed by PySide6 (touchy-pad[sim] GUI). Without these,` \
+      `# 'import PySide6' fails with "libglib-2.0.so.0: cannot open shared` \
+      `# object file". libgl1/libegl1 are needed for offscreen and X11 platforms;` \
+      `# libxkbcommon / libdbus / libfontconfig / libnss3 are runtime deps of the` \
+      `# Qt platform plugins the wheel ships. libxcb-cursor0 is required by` \
+      `# the xcb plugin from Qt 6.5+ for cursor themes when forwarding to a host X11.` \
+      libglib2.0-0 \
+      libgl1 \
+      libegl1 \
+      libfontconfig1 \
+      libdbus-1-3 \
+      libdbus-1-dev \
+      libglib2.0-dev \
+      pkg-config \
+      libxkbcommon0 \
+      libnss3 \
+      libxcb-cursor0 \
+      libxkbcommon-x11-0 \
+      `# Additional xcb libs the Qt 'xcb' platform plugin loads at runtime.` \
+      `# Without these, Qt aborts with "Could not load the Qt platform plugin xcb"` \
+      `# even when libxcb-cursor0 is present.` \
+      libxcb-icccm4 \
+      libxcb-image0 \
+      libxcb-keysyms1 \
+      libxcb-randr0 \
+      libxcb-render-util0 \
+      libxcb-shape0 \
+      libxcb-sync1 \
+      libxcb-xfixes0 \
+      libxcb-xinerama0 \
+      libxcb-xkb1 \
+      `# Tauri (and OpenDeck) build dependencies.` \
+      `# libwebkit2gtk-4.1-dev is the WebKit renderer Tauri shells into.` \
+      `# libayatana-appindicator3-dev is needed for system-tray support.` \
+      `# libudev-dev is required by the elgato-streamdeck Rust crate.` \
+      build-essential \
+      file \
+      unzip \
+      libxdo-dev \
+      libssl-dev \
+      libwebkit2gtk-4.1-dev \
+      libayatana-appindicator3-dev \
+      librsvg2-dev \
+      libudev-dev \
+      `# StreamController (tools/StreamController) runtime and build deps.` \
+      `# python3-dev provides the Python pkg-config entry meson needs to` \
+      `# build dbus-python. The GTK/GObject packages are needed at runtime.` \
+      python3-dev \
+      python3-gi \
+      python3-gi-cairo \
+      python3-dbus \
+      gobject-introspection \
+      libgirepository1.0-dev \
+      gir1.2-gtk-4.0 \
+      gir1.2-adw-1 \
+      gir1.2-glib-2.0 \
+      libgtk-4-dev \
+      libadwaita-1-dev \
+      libportal-dev \
+      libhidapi-libusb0 \
+      dbus \
+      dbus-x11 \
+      `# catchsegv (from libc-bin) prints C-level backtraces on segfault.` \
+      `# Used by the app-run just recipe together with PYTHONFAULTHANDLER.` \
+      libc-bin gh
+
+# Ensure the dev user exists (it does on ubuntu:23.04+, but stay defensive
+# in case the base ever drops it) and give it passwordless sudo.
+RUN if ! id -u ${USERNAME} > /dev/null 2>&1; then \
+        groupadd --gid 1000 ${USERNAME} && \
+        useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash ${USERNAME}; \
+    fi \
+ && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME}-nopasswd
+
+## Set up udev rules for PlatformIO
+RUN curl -fsSL https://raw.githubusercontent.com/platformio/platformio-core/develop/platformio/assets/system/99-platformio-udev.rules | sudo tee /etc/udev/rules.d/99-platformio-udev.rules
+RUN usermod -a -G dialout ${USERNAME}
+RUN usermod -a -G plugdev ${USERNAME}
+
+## Install yq (YAML/JSON processor) from GitHub releases
+RUN curl -fsSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+      -o /usr/local/bin/yq \
+ && chmod +x /usr/local/bin/yq
+
+ARG FEDORA_COMPAT=0
+### Set up compatibility with Fedora host (if needed)
+### Since Fedora uses `18` as the group for dialout, we need to add it to the container
+RUN if [ "$FEDORA_COMPAT" = "1" ]; then \
+  groupadd -g 18 compat_dialout; \
+  usermod -a -G compat_dialout ${USERNAME}; \
+fi
+
+# use the host's USB devices instead of the container's
+#RUN mv /dev/bus/usb /dev/bus/oldusb
+#RUN ln -s /host/dev/bus/usb /dev/bus
+
+# Install Espressif IoT Development Framework
+#RUN echo "deb [trusted=yes] https://dl.espressif.com/dl/eim/apt/ stable main" | sudo tee /etc/apt/sources.list.d/espressif.list
+#RUN apt update
+#RUN apt install -y eim-cli
+#RUN eim install
+#RUN chown -R ${USERNAME} /root/.espressif && chmod a+rx /root
+
+# Ensure the user's home config dir is writable (Ubuntu base image may create
+# ~/.config as root via earlier RUN steps that run as root).
+RUN mkdir -p /home/${USERNAME}/.config && chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.config
+
+# Put the ESP tools in my path
+USER ${USERNAME}
+#RUN ln -s /root/.espressif $HOME
+# @geeksville - I think this is no longer necessary, now we only ~/.espressif/tools/activate_idf_v6.0.1.sh
+# from the Justfile when we build-firmware
+# Seed a sane zsh PROMPT before sourcing the ESP-IDF activate script — that
+# script uses bash-style PS1 escapes (\u\h\w\$) which zsh prints literally.
+# Setting PROMPT here means the prefix the activate script prepends is added
+# to a string zsh actually understands.
+#RUN printf '%s\n' \
+#        'autoload -U colors && colors' \
+#        'PROMPT="%n@%m:%~%# "' \
+#      >> $HOME/.zshrc
+#RUN echo 'source ~/.espressif/tools/activate_idf_v6.0.1.sh' | tee -a $HOME/.bashrc $HOME/.zshrc
+
