@@ -125,6 +125,28 @@ itself.
 > PSRAM; with the quad default the chip reports "PSRAM not found" and the event
 > ring silently drops from 2048 entries in PSRAM to 128 in heap.
 
+## Status LED
+
+If the board has a WS2812/NeoPixel wired up, the firmware drives it as a
+one-glance health light:
+
+| State | Meaning |
+|---|---|
+| Breathing green | No alerts. The trap is armed and quiet. |
+| Blinking red | At least one `SEV_ALERT` event — credential theft, dropper URL, botnet signature. |
+
+The pixel pin is set per environment with `-DHP_STATUS_LED_PIN=<gpio>`:
+
+| Board | Pin |
+|---|---|
+| ESP32-S3-N16R8 (`esp32s3`) | GPIO 48 |
+| M5Stack AtomS3 (`atoms3`) | GPIO 35 (built-in RGB LED) |
+| Classic ESP32 (`esp32dev`) | none — LED module compiles to a no-op |
+
+Clearing the stats in the control panel resets the alert counter, so the LED
+returns to breathing green. The animation runs on its own low-priority task and
+never touches the honeypot or the panel.
+
 ## First-time setup
 
 **1. Power it on.** With no configuration stored it starts its own network. The

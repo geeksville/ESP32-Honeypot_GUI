@@ -18,6 +18,7 @@
 #include "hp_services.h"
 #include "hp_artifacts.h"
 #include "hp_web.h"
+#include "hp_led.h"
 
 static const char* AP_SSID = "honeypot-setup";
 static const char* AP_PASS = "trapdoor123";     // ≥8 chars, WPA2 minimum
@@ -94,6 +95,16 @@ static void potTask(void*) {
   for (;;) {
     svcPump();
     vTaskDelay(pdMS_TO_TICKS(2));
+  }
+}
+
+// Status LED. Lowest priority on core 0: it only has to look pretty, and a
+// slow frame must never delay the panel or the Wi-Fi supervision.
+static void ledTask(void*) {
+  ledBegin();
+  for (;;) {
+    ledPump();
+    vTaskDelay(pdMS_TO_TICKS(30));
   }
 }
 
@@ -198,6 +209,7 @@ void setup() {
 
   xTaskCreatePinnedToCore(potTask, "hp_pot", 12288, nullptr, 3, nullptr, 1);
   xTaskCreatePinnedToCore(netTask, "hp_net", 8192, nullptr, 2, nullptr, 0);
+  xTaskCreatePinnedToCore(ledTask, "hp_led", 4096, nullptr, 1, nullptr, 0);
 }
 
 void loop() {

@@ -18,6 +18,10 @@ size_t evSince(uint32_t cursor, Event* out, size_t max, uint32_t* outCursor);
 uint32_t evLatestSeq();
 uint32_t evRingCapacity();
 
+// Number of SEV_ALERT events since boot (or since stats were last cleared).
+// Drives the status LED: any alert flips it from breathing green to blinking red.
+uint32_t evAlertCount();
+
 void evStatsJson(JsonObject o);
 void evClearStats();
 

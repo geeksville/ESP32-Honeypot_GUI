@@ -204,6 +204,14 @@ size_t evSince(uint32_t cursor, Event* out, size_t max, uint32_t* outCursor) {
 uint32_t evLatestSeq()     { return s_nextSeq - 1; }
 uint32_t evRingCapacity()  { return s_ringCap; }
 
+uint32_t evAlertCount() {
+  uint32_t n = 0;
+  if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+  n = s_sevTotals[SEV_ALERT];
+  if (s_lock) xSemaphoreGive(s_lock);
+  return n;
+}
+
 // ----------------------------------------------------------------- stats ---
 
 void evStatsJson(JsonObject o) {
