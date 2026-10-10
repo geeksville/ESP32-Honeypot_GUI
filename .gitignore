@@ -8,3 +8,4 @@
 # libFuzzer writes its generated corpus back into the seed directory
 test/corpus/*
 !test/corpus/session*
+.venv/
