@@ -491,8 +491,10 @@ bool shellFeedLine(ShellSession& s, const String& line, Print& out, uint32_t ip)
     case SH_PASSWORD: {
       String p = hpSanitize(line, 40);
       // The credential pair is the product here — record it as one unit so the
-      // dashboard can rank "what are they guessing with".
-      evLog(EV_LOGIN, SEV_NOTICE, ip, 23, "%s : %s",
+      // dashboard can rank "what are they guessing with". Anyone who reaches
+      // the password prompt is actively attacking the box, so this is an alert,
+      // not background noise.
+      evLog(EV_LOGIN, SEV_ALERT, ip, 23, "%s : %s",
             s.pendingUser, p.length() ? p.c_str() : "<empty>");
       hpCopy(s.user, sizeof(s.user), s.pendingUser);
       s.stage = SH_PROMPT;
@@ -513,7 +515,9 @@ bool shellFeedLine(ShellSession& s, const String& line, Print& out, uint32_t ip)
 
     default: {
       String cmd = hpSanitize(line, HP_DETAIL_LEN - 24);
-      if (cmd.length()) evLog(EV_COMMAND, SEV_NOTICE, ip, 23, "%s", cmd.c_str());
+      // A command only exists because someone already got past the login
+      // prompt — that is an intrusion in progress, not a mere event.
+      if (cmd.length()) evLog(EV_COMMAND, SEV_ALERT, ip, 23, "%s", cmd.c_str());
       bool keep = execCommand(s, cmd, out, ip);
       if (!keep) return false;
       if (++s.commands > MAX_COMMANDS) return false;

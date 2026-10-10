@@ -297,7 +297,7 @@ SIEM ingest, and RFC 5424 syslog over UDP.
 
 | Setting | Why it matters |
 |---|---|
-| Severity floor | A port scan should not page you at 3am. Default: logins and commands. |
+| Severity floor | A port scan should not page you at 3am. Default: logins and commands. Anyone who logs in or types a command is already attacking the box, so those are alerts. |
 | Cooldown | One scan touches every port at once; this stops a single visitor sending a hundred messages. |
 | Send a test alert | Proves the destination works before you rely on it. |
 
