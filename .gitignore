@@ -9,3 +9,4 @@
 test/corpus/*
 !test/corpus/session*
 .venv/
+src/ui_index.h

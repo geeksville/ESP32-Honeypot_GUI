@@ -132,7 +132,8 @@ one-glance health light:
 
 | State | Meaning |
 |---|---|
-| Breathing green | No alerts. The trap is armed and quiet. |
+| Breathing yellow | Not on the Wi-Fi network — unconfigured, or the link to the AP is down. |
+| Breathing green | On Wi-Fi, no alerts. The trap is armed and quiet. |
 | Blinking red | At least one `SEV_ALERT` event — credential theft, dropper URL, botnet signature. |
 
 The pixel pin is set per environment with `-DHP_STATUS_LED_PIN=<gpio>`:
@@ -144,8 +145,10 @@ The pixel pin is set per environment with `-DHP_STATUS_LED_PIN=<gpio>`:
 | Classic ESP32 (`esp32dev`) | none — LED module compiles to a no-op |
 
 Clearing the stats in the control panel resets the alert counter, so the LED
-returns to breathing green. The animation runs on its own low-priority task and
-never touches the honeypot or the panel.
+returns to breathing green (or yellow, if the station link is still down). An
+alert always outranks the Wi-Fi state: if the trap is being poked while the
+network is down, the LED blinks red. The animation runs on its own low-priority
+task and never touches the honeypot or the panel.
 
 ## First-time setup
 
