@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>honeypot</title>
+<title>server</title>
 <style>
 /* ==========================================================================
    Orange phosphor over glass.
@@ -393,14 +393,14 @@ code{color:var(--o);font-size:.94em}
   <path d="M9.5 5.6l3.2 1.85v3.7L9.5 13 6.3 11.15v-3.7z" fill="currentColor"/>
 </g></defs></svg>
 
-<div class="gate" id="gate">
+<div class="gate" id="gate" data-open="1">
   <div class="bloom" aria-hidden="true"></div>
   <form id="gateForm">
     <svg class="comb" viewBox="0 0 19 17"><use href="#combg"/></svg>
-    <h1>honeypot<span class="cur"></span></h1>
-    <p>control panel locked</p>
+    <h1>server<span class="cur"></span></h1>
+    <p>server login</p>
     <input type="password" id="gatePass" placeholder="password" autocomplete="current-password" required>
-    <button class="btn" data-tone="hot" type="submit">Unlock</button>
+    <button class="btn" data-tone="hot" type="submit">Sign in</button>
     <div class="err" id="gateErr"></div>
   </form>
 </div>
@@ -922,6 +922,7 @@ async function tick() {
       events = events.concat(st.events).slice(-600);
     }
     cursor = st.cursor;
+    closeGate();   // a successful poll means we're in — drop the login card
     renderMast(st); renderBait(st); renderStats(st); renderRail(st);
     refreshArtifacts(st.artifacts);
     if (!paused) renderFeed();
