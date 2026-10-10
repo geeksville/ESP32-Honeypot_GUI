@@ -91,6 +91,12 @@ struct AppConfig {
   bool     alwaysAp;               // keep the setup AP up alongside the LAN
   bool     logToFlash;
 
+  // Advertise the bait services over mDNS (Bonjour/Avahi) so the trap shows up
+  // on the LAN as the real thing — a file server, a DB box, etc. The control
+  // panel's own _http._tcp record is always published so the operator can find
+  // the device; this only controls the bait-port records.
+  bool     mdnsAdvertise;
+
   // Where the control panel may be reached from. The bait ports are meant to
   // face the internet; the panel is not, and forwarding port 80 by accident
   // should not hand over the device. Enforced on every request by source

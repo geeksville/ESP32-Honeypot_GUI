@@ -14,6 +14,10 @@
 static WebServer s_srv(80);
 static bool      s_apFallback = false;
 
+// Defined below webBegin; also called from handlePostConfig so the advertised
+// records track the armed set and the toggle without a reboot.
+static void mdnsApply();
+
 void webSetApFallback(bool active) { s_apFallback = active; }
 
 // -------------------------------------------------------- source gating ---
@@ -150,6 +154,8 @@ static void handleState() {
   JsonObject dev = root["device"].to<JsonObject>();
   dev["version"]   = HP_VERSION;
   dev["hostname"]  = g_cfg.hostname;
+  dev["mdnsUrl"]   = String("http://") + g_cfg.hostname + ".local/";
+  dev["mdnsAdvertise"] = g_cfg.mdnsAdvertise;
   dev["uptimeS"]   = millis() / 1000;
   dev["heapFree"]  = ESP.getFreeHeap();
   dev["heapMin"]   = ESP.getMinFreeHeap();
@@ -274,6 +280,9 @@ static void handlePostConfig() {
 
   // Re-arm immediately: changing the bait shouldn't need a reboot.
   svcApplyConfig();
+  // The advertised mDNS records follow the armed set and the toggle. A hostname
+  // change also lands here, and MDNS.begin() re-registers under the new name.
+  mdnsApply();
   evLog(EV_SYSTEM, SEV_INFO, 0, 0, "settings changed from the control panel");
 
   JsonDocument d;
@@ -380,9 +389,59 @@ void webBegin() {
 
   s_srv.begin();
 
-  if (MDNS.begin(g_cfg.hostname)) {
-    MDNS.addService("http", "tcp", 80);
-    Serial.printf("[web] control panel at http://%s.local/\n", g_cfg.hostname);
+  mdnsApply();
+}
+
+// ---------------------------------------------------------------- mDNS ----
+
+// The control panel's own record is always published so the operator can find
+// the device at http://<hostname>.local/. The bait services are advertised too
+// (when enabled) so the trap shows up on the LAN as the real thing — a file
+// server, a DB box, a VNC host — rather than as a bare web server. That is what
+// makes it discoverable to avahi-browse, Windows Network, and network scanners.
+//
+// Called at boot and again whenever the armed set, the toggle or the hostname
+// changes, so the advertised records always match what the device is actually
+// listening on. MDNS.begin() does not clear previously added records, so a
+// re-apply tears the responder down first.
+static bool s_mdnsStarted = false;
+
+static void mdnsApply() {
+  if (s_mdnsStarted) MDNS.end();
+  s_mdnsStarted = false;
+
+  if (!MDNS.begin(g_cfg.hostname)) {
+    Serial.println("[mdns] could not start mDNS responder");
+    return;
+  }
+  s_mdnsStarted = true;
+
+  // The panel record is unconditional — without it the operator has no mDNS
+  // way to find the device at all.
+  MDNS.addService("http", "tcp", 80);
+  Serial.printf("[mdns] control panel at http://%s.local/\n", g_cfg.hostname);
+
+  if (!g_cfg.mdnsAdvertise) {
+    Serial.println("[mdns] bait service advertising is off");
+    return;
+  }
+
+  size_t n = 0;
+  const ServiceDef* cat = svcCatalogue(n);
+  for (size_t i = 0; i < n; i++) {
+    const ServiceDef& d = cat[i];
+    if (!d.mdnsType || !cfgPortArmed(d.port)) continue;
+    MDNS.addService(d.mdnsType, "tcp", d.port);
+    // TXT records are key=value pairs; the catalogue stores them as one
+    // "u=root" string, split here for the ESPmDNS API.
+    if (d.mdnsTxt) {
+      const char* eq = strchr(d.mdnsTxt, '=');
+      if (eq) {
+        String key(d.mdnsTxt, eq - d.mdnsTxt);
+        MDNS.addServiceTxt(d.mdnsType, "tcp", key.c_str(), eq + 1);
+      }
+    }
+    Serial.printf("[mdns] advertising %s on %u\n", d.mdnsType, d.port);
   }
 }
 

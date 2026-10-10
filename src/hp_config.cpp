@@ -23,6 +23,7 @@ void cfgSetDefaults(AppConfig& c) {
   c.notifyCooldownS    = 10;
   c.logToFlash         = true;
   c.alwaysAp           = false;
+  c.mdnsAdvertise      = true;   // discoverability is the point; opt out if you must hide
   c.collectArtifacts   = false;
   c.panelAccess        = PANEL_PRIVATE;
   c.lanOnly            = false;
@@ -173,6 +174,7 @@ bool cfgApplyJson(JsonObjectConst in, String& err, bool lenient) {
   }
   if (in["alwaysAp"].is<bool>())   n.alwaysAp   = in["alwaysAp"];
   if (in["logToFlash"].is<bool>()) n.logToFlash = in["logToFlash"];
+  if (in["mdnsAdvertise"].is<bool>()) n.mdnsAdvertise = in["mdnsAdvertise"];
   if (in["collectArtifacts"].is<bool>()) n.collectArtifacts = in["collectArtifacts"];
   if (in["lanOnly"].is<bool>())         n.lanOnly          = in["lanOnly"];
   if (in["panelAccess"].is<uint8_t>()) {
@@ -238,6 +240,7 @@ void cfgToJson(JsonObject out, bool includeSecrets) {
   out["tz"]                = g_cfg.tz;
   out["alwaysAp"]          = g_cfg.alwaysAp;
   out["logToFlash"]        = g_cfg.logToFlash;
+  out["mdnsAdvertise"]     = g_cfg.mdnsAdvertise;
   out["collectArtifacts"]  = g_cfg.collectArtifacts;
   out["panelAccess"]       = g_cfg.panelAccess;
   out["lanOnly"]           = g_cfg.lanOnly;

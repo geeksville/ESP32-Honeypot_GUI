@@ -182,6 +182,11 @@ serial console tells you exactly what to connect to:
 - **Hostname the shell reports** — pick something that fits the network you are
   putting it on. A trap called `honeypot` catches nothing. Default is
   `srv-fileshare`.
+- **Advertise the bait over mDNS** — on by default. Publishes the armed ports
+  as `_ssh._tcp`, `_ftp._tcp`, etc. so the trap shows up on the LAN as the real
+  thing. The panel's own `http://<hostname>.local/` record is always published;
+  this only controls the bait-port records. Turn it off if you want the trap to
+  stay invisible to network browsing.
 
 ![Settings](docs/settings.png)
 
@@ -197,9 +202,19 @@ address on the serial console, in your router's DHCP table, or at
 [svc] armed :22    OpenSSH 8.9p1 Ubuntu
 [svc] armed :23    Linux telnetd
 ...
+[mdns] control panel at http://srv-fileshare.local/
+[mdns] advertising _ftp on 21
+[mdns] advertising _ssh on 22
+[mdns] advertising _telnet on 23
+...
 ```
 
 That is it — the trap is live and the panel stays reachable while it runs.
+Because the bait services are advertised over mDNS, the device shows up on the
+LAN as a real file server / DB box: `avahi-browse -a` (Linux), `dns-sd -B`
+(macOS), or Windows Network all list it under the hostname you set, and the
+advertised records always match the armed ports — arm or disarm a port in the
+panel and the advertisement follows immediately.
 
 If the configured network later disappears, the device brings the setup AP back
 up and retries with backoff. It does not reboot, and it pauses retrying while
@@ -215,6 +230,7 @@ air.
 | Panel URL, setup mode | `http://192.168.4.1/` | — |
 | Panel URL, on your LAN | DHCP address or `http://srv-fileshare.local/` | Settings → hostname |
 | Panel reachable from | private networks only | Settings → Control panel |
+| Bait advertised over mDNS | **on** | Settings → Disguise |
 | **Panel password** | **none — unset on first boot** | Settings → Control panel |
 | Fake shell login | **any username and password are accepted** | by design |
 

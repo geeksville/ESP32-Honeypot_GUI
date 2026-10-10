@@ -417,6 +417,7 @@ code{color:var(--o);font-size:.94em}
         <span class="seg" id="mHost"></span>
         <span class="seg" data-opt id="mNet"></span>
         <span class="seg" data-opt id="mIp"></span>
+        <span class="seg" data-opt id="mMdns"></span>
       </div>
       <button class="btn" id="openSettings">settings</button>
     </div>
@@ -580,6 +581,11 @@ code{color:var(--o);font-size:.94em}
           <input id="fTz" name="tz" placeholder="UTC0">
           <div class="hint">POSIX format, e.g. <code>CET-1CEST,M3.5.0,M10.5.0/3</code>. Used for timestamps on captured events.</div>
         </div>
+        <label class="check">
+          <input type="checkbox" id="fMdns" name="mdnsAdvertise">
+          <span class="t">Advertise the bait over mDNS
+            <small>Publishes the armed ports as <code>_ssh._tcp</code>, <code>_ftp._tcp</code>, etc. so the trap shows up on the LAN as the real thing — a file server, a DB box. The panel's own <code>http://&lt;hostname&gt;.local/</code> record is always published; this only controls the bait-port records. Turn off to keep the trap invisible to network browsing.</small></span>
+        </label>
       </fieldset>
 
       <fieldset>
@@ -762,7 +768,8 @@ function renderBait(st) {
   const cat = st.services.catalogue, hits = st.stats.ports || {};
   const armed = cat.filter(c => c.armed).length;
   $('#baitSub').innerHTML = `<b>${armed}</b>/${cat.length} ports armed<br>` +
-    `${st.services.active}/${st.services.slots} sessions open`;
+    `${st.services.active}/${st.services.slots} sessions open` +
+    (st.device.mdnsAdvertise ? `<br>advertised over mDNS` : `<br>mDNS bait advertising off`);
 
   const max = Math.max(1, ...Object.values(hits));
   $('#baitGrid').innerHTML = cat.map(c => {
@@ -892,6 +899,11 @@ function renderMast(st) {
   $('#mHost').textContent = st.device.hostname;
   $('#mNet').textContent = online ? `${st.net.ssid} ${st.net.rssi}dBm` : (st.net.ap ? 'honeypot-setup' : '—');
   $('#mIp').textContent = online ? st.net.ip : (st.net.apIp || '');
+  $('#mMdns').textContent = st.device.mdnsUrl || '';
+  $('#mMdns').dataset.copy = st.device.mdnsUrl || '';
+  $('#mMdns').title = st.device.mdnsAdvertise
+    ? 'control panel · bait services advertised over mDNS — click to copy'
+    : 'control panel only · bait advertising off — click to copy';
   $('#warnbar').hidden = st.authRequired;
 
   $('#catchSub').innerHTML = `<b>${st.stats.total}</b> events recorded<br>` +
@@ -1059,6 +1071,7 @@ async function loadConfig() {
     $('#fCooldown').value = c.notifyCooldownS;
     $('#fAlwaysAp').checked = !!c.alwaysAp;
     $('#fLogFlash').checked = !!c.logToFlash;
+    $('#fMdns').checked = !!c.mdnsAdvertise;
     $('#fCollect').checked = !!c.collectArtifacts;
     $('#fLanOnly').checked = !!c.lanOnly;
     $('#fPanelAccess').value = c.panelAccess;
@@ -1085,6 +1098,7 @@ $('#cfgForm').addEventListener('submit', async e => {
     notifyCooldownS: +$('#fCooldown').value || 0,
     alwaysAp: $('#fAlwaysAp').checked,
     logToFlash: $('#fLogFlash').checked,
+    mdnsAdvertise: $('#fMdns').checked,
     collectArtifacts: $('#fCollect').checked,
     lanOnly: $('#fLanOnly').checked,
     panelAccess: +$('#fPanelAccess').value,

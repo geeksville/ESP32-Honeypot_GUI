@@ -61,21 +61,21 @@ static const uint8_t B_RDP[] = {
 };
 
 static const ServiceDef CATALOGUE[] = {
-  {   21, "FTP",     "ProFTPD 1.3.8 (Debian)",   "220 ProFTPD Server (Debian)",              SVC_FTP,    B_FTP,   sizeof(B_FTP) - 1},
-  {   22, "SSH",     "OpenSSH 8.9p1 Ubuntu",     "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.5",  SVC_SSH,    B_SSH,   sizeof(B_SSH) - 1},
-  {   23, "Telnet",  "Linux telnetd",            "Interactive Ubuntu 22.04 shell",           SVC_TELNET, nullptr, 0},
-  {   25, "SMTP",    "Postfix (Ubuntu)",         "220 mail.corp.local ESMTP Postfix",        SVC_SMTP,   B_SMTP,  sizeof(B_SMTP) - 1},
-  {   53, "DNS",     "ISC BIND 9.18.18",         "CHAOS TXT version.bind → 9.18.18",         SVC_DNS,    nullptr, 0},
-  {  110, "POP3",    "Dovecot pop3d",            "+OK Dovecot (Ubuntu) ready.",              SVC_POP3,   B_POP3,  sizeof(B_POP3) - 1},
-  {  143, "IMAP",    "Dovecot imapd",            "* OK [CAPABILITY IMAP4rev1 …] Dovecot",    SVC_IMAP,   B_IMAP,  sizeof(B_IMAP) - 1},
-  {  443, "HTTPS",   "Apache 2.4.52 (Ubuntu)",   "HTTP/1.1 200 — Apache/2.4.52 (Ubuntu)",    SVC_HTTP,   nullptr, 0},
-  {  445, "SMB",     "Samba 4.15.13 (Ubuntu)",   "SMB negotiate response",                   SVC_BANNER, B_SMB,   sizeof(B_SMB)},
-  { 3306, "MySQL",   "MySQL 8.0.35-0ubuntu0.22", "8.0.35-0ubuntu0.22.04.1 handshake",        SVC_BANNER, B_MYSQL, sizeof(B_MYSQL)},
-  { 3389, "RDP",     "Microsoft Terminal Svc",   "X.224 Connection Confirm",                 SVC_BANNER, B_RDP,   sizeof(B_RDP)},
-  { 5900, "VNC",     "RealVNC 5.3",              "RFB 003.008",                              SVC_BANNER, B_VNC,   sizeof(B_VNC) - 1},
+  {   21, "FTP",     "ProFTPD 1.3.8 (Debian)",   "220 ProFTPD Server (Debian)",              SVC_FTP,    B_FTP,   sizeof(B_FTP) - 1, "_ftp",    "u=anonymous"},
+  {   22, "SSH",     "OpenSSH 8.9p1 Ubuntu",     "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.5",  SVC_SSH,    B_SSH,   sizeof(B_SSH) - 1, "_ssh",    "u=root"},
+  {   23, "Telnet",  "Linux telnetd",            "Interactive Ubuntu 22.04 shell",           SVC_TELNET, nullptr, 0,                "_telnet", "u=root"},
+  {   25, "SMTP",    "Postfix (Ubuntu)",         "220 mail.corp.local ESMTP Postfix",        SVC_SMTP,   B_SMTP,  sizeof(B_SMTP) - 1, "_smtp",   nullptr},
+  {   53, "DNS",     "ISC BIND 9.18.18",         "CHAOS TXT version.bind → 9.18.18",         SVC_DNS,    nullptr, 0,                "_dns",    nullptr},
+  {  110, "POP3",    "Dovecot pop3d",            "+OK Dovecot (Ubuntu) ready.",              SVC_POP3,   B_POP3,  sizeof(B_POP3) - 1, "_pop3",   nullptr},
+  {  143, "IMAP",    "Dovecot imapd",            "* OK [CAPABILITY IMAP4rev1 …] Dovecot",    SVC_IMAP,   B_IMAP,  sizeof(B_IMAP) - 1, "_imap",   nullptr},
+  {  443, "HTTPS",   "Apache 2.4.52 (Ubuntu)",   "HTTP/1.1 200 — Apache/2.4.52 (Ubuntu)",    SVC_HTTP,   nullptr, 0,                "_https",  nullptr},
+  {  445, "SMB",     "Samba 4.15.13 (Ubuntu)",   "SMB negotiate response",                   SVC_BANNER, B_SMB,   sizeof(B_SMB),     "_smb",    "u=guest"},
+  { 3306, "MySQL",   "MySQL 8.0.35-0ubuntu0.22", "8.0.35-0ubuntu0.22.04.1 handshake",        SVC_BANNER, B_MYSQL, sizeof(B_MYSQL),    "_mysql",  "u=root"},
+  { 3389, "RDP",     "Microsoft Terminal Svc",   "X.224 Connection Confirm",                 SVC_BANNER, B_RDP,   sizeof(B_RDP),     "_rdp",    nullptr},
+  { 5900, "VNC",     "RealVNC 5.3",              "RFB 003.008",                              SVC_BANNER, B_VNC,   sizeof(B_VNC) - 1, "_vnc",    "u=nobody"},
   // Redis stays silent until spoken to, exactly like the real server.
-  { 6379, "Redis",   "Redis 6.0.16",             "-DENIED protected mode",                   SVC_REDIS,  nullptr, 0},
-  { 8080, "HTTP-alt","Apache 2.4.52 (Ubuntu)",   "HTTP/1.1 200 — Apache/2.4.52 (Ubuntu)",    SVC_HTTP,   nullptr, 0},
+  { 6379, "Redis",   "Redis 6.0.16",             "-DENIED protected mode",                   SVC_REDIS,  nullptr, 0,                "_redis",  nullptr},
+  { 8080, "HTTP-alt","Apache 2.4.52 (Ubuntu)",   "HTTP/1.1 200 — Apache/2.4.52 (Ubuntu)",    SVC_HTTP,   nullptr, 0,                "_http",   nullptr},
 };
 static const size_t CATALOGUE_N = sizeof(CATALOGUE) / sizeof(CATALOGUE[0]);
 

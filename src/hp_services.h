@@ -27,6 +27,8 @@ struct ServiceDef {
   SvcKind        kind;
   const uint8_t* banner;
   uint16_t       bannerLen;
+  const char*    mdnsType;  // mDNS service type, e.g. "_ssh" (no "_tcp" suffix); nullptr = never advertise
+  const char*    mdnsTxt;   // TXT record, e.g. "u=root"; nullptr = none
 };
 
 // The full catalogue, including ports not armed by default.
