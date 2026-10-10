@@ -15,8 +15,8 @@
 static Adafruit_NeoPixel s_px(1, HP_STATUS_LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Breathing: brightness follows a sine wave between these bounds.
-static const uint8_t  BREATH_MIN = 5;
-static const uint8_t  BREATH_MAX = 40;
+static const uint8_t  BREATH_MIN = 2;
+static const uint8_t  BREATH_MAX = 30;
 static const uint32_t BREATH_PERIOD_MS = 2600;   // one full in-out cycle
 
 // Blink: full red for this long, then off, repeating.
