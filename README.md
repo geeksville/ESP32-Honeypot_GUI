@@ -127,8 +127,10 @@ itself.
 
 ## Status LED
 
-If the board has a WS2812/NeoPixel wired up, the firmware drives it as a
-one-glance health light:
+The firmware drives a single status LED as a one-glance health light. Two
+backends are supported, chosen per environment with `-DHP_STATUS_LED_RGB`:
+
+**RGB boards** (`-DHP_STATUS_LED_RGB=1`, a WS2812/NeoPixel):
 
 | State | Meaning |
 |---|---|
@@ -136,13 +138,23 @@ one-glance health light:
 | Breathing green | On Wi-Fi, no alerts. The trap is armed and quiet. |
 | Blinking red | At least one `SEV_ALERT` event — credential theft, dropper URL, botnet signature. |
 
-The pixel pin is set per environment with `-DHP_STATUS_LED_PIN=<gpio>`:
+**Plain GPIO boards** (`-DHP_STATUS_LED_RGB=0`, a single uncoloured LED driven
+with hardware PWM):
 
-| Board | Pin |
+| State | Meaning |
 |---|---|
-| ESP32-S3-N16R8 (`esp32s3`) | GPIO 48 |
-| M5Stack AtomS3 (`atoms3`) | GPIO 35 (built-in RGB LED) |
-| Classic ESP32 (`esp32dev`) | none — LED module compiles to a no-op |
+| Off | Not on the Wi-Fi network — unconfigured, or the link to the AP is down. |
+| Dim breathing | On Wi-Fi, no alerts. The trap is armed and quiet. |
+| Bright blinking | At least one `SEV_ALERT` event — credential theft, dropper URL, botnet signature. |
+
+The pin is set per environment with `-DHP_STATUS_LED_PIN=<gpio>`:
+
+| Board | Pin | Type |
+|---|---|---|
+| ESP32-S3-N16R8 (`esp32s3`) | GPIO 48 | RGB (NeoPixel) |
+| M5Stack AtomS3 (`atoms3`) | GPIO 35 | RGB (built-in NeoPixel) |
+| Seeed XIAO ESP32S3 (`seeed_xiao_esp32s3`) | GPIO 21 | plain GPIO (PWM) |
+| Classic ESP32 (`esp32dev`) | none | LED module compiles to a no-op |
 
 Clearing the stats in the control panel resets the alert counter, so the LED
 returns to breathing green (or yellow, if the station link is still down). An

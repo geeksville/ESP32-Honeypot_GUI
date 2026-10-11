@@ -1,15 +1,31 @@
 // Status LED implementation. See hp_led.h for the contract.
 //
-// Uses the Adafruit NeoPixel driver, which drives WS2812/WS2812B pixels over
-// the ESP32's RMT peripheral — no bit-banging, no interrupts to babysit.
+// Two backends, chosen at build time:
+//   HP_STATUS_LED_RGB == 1 : Adafruit NeoPixel (WS2812) — breathing green,
+//                            breathing yellow, blinking red.
+//   HP_STATUS_LED_RGB == 0 : plain GPIO driven with hardware PWM (LEDC) —
+//                            dim breathing when healthy, bright blink on alert.
 #include "hp_led.h"
 #include "hp_events.h"
 #include "hp_config.h"
 
 #if defined(HP_STATUS_LED_PIN)
 
-#include <Adafruit_NeoPixel.h>
 #include <WiFi.h>
+
+// The station is "up" only when it is actually joined to the configured
+// network. Unconfigured (no SSID) or a dropped link both read as down, which
+// is exactly the state the operator needs the LED to flag.
+bool ledWifiUp() {
+  return g_cfg.ssid[0] && WiFi.status() == WL_CONNECTED;
+}
+
+#if defined(HP_STATUS_LED_RGB) && HP_STATUS_LED_RGB == 1
+
+// ---- NeoPixel backend -----------------------------------------------------
+// Adafruit NeoPixel drives WS2812/WS2812B pixels over the ESP32's RMT
+// peripheral — no bit-banging, no interrupts to babysit.
+#include <Adafruit_NeoPixel.h>
 
 // One pixel, GRB order (the WS2812 default), NEO_KHZ800 signalling.
 static Adafruit_NeoPixel s_px(1, HP_STATUS_LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -26,13 +42,6 @@ static const uint32_t BLINK_OFF_MS = 250;
 static uint32_t s_lastMs = 0;
 static bool     s_alert  = false;
 static bool     s_wifiUp = false;
-
-// The station is "up" only when it is actually joined to the configured
-// network. Unconfigured (no SSID) or a dropped link both read as down, which
-// is exactly the state the operator needs the LED to flag.
-bool ledWifiUp() {
-  return g_cfg.ssid[0] && WiFi.status() == WL_CONNECTED;
-}
 
 void ledBegin() {
   s_px.begin();
@@ -80,6 +89,66 @@ void ledPump() {
 
   s_px.show();
 }
+
+#else
+
+// ---- Plain GPIO backend ---------------------------------------------------
+// No colour, so the states collapse to brightness:
+//   off           : not on Wi-Fi (unconfigured, or link down)
+//   dim breathing : on Wi-Fi, no alerts
+//   bright blink  : at least one alert
+// analogWrite() on the ESP32 maps to the LEDC peripheral — true hardware PWM.
+static const uint8_t  BREATH_MIN = 2;
+static const uint8_t  BREATH_MAX = 30;
+static const uint32_t BREATH_PERIOD_MS = 2600;   // one full in-out cycle
+
+// Blink: full brightness for this long, then off, repeating.
+static const uint32_t BLINK_ON_MS  = 250;
+static const uint32_t BLINK_OFF_MS = 250;
+
+static uint32_t s_lastMs = 0;
+static bool     s_alert  = false;
+static bool     s_wifiUp = false;
+
+void ledBegin() {
+  analogWrite(HP_STATUS_LED_PIN, 0);
+  Serial.printf("[led] status LED on GPIO %d (PWM)\n", HP_STATUS_LED_PIN);
+}
+
+void ledPump() {
+  uint32_t now = millis();
+  if (now - s_lastMs < 30) return;   // ~30 ms frame cadence
+  s_lastMs = now;
+
+  bool alert = evAlertCount() > 0;
+  bool wifiUp = ledWifiUp();
+  if (alert != s_alert || wifiUp != s_wifiUp) {
+    s_alert  = alert;
+    s_wifiUp = wifiUp;
+    if (alert) {
+      Serial.println("[led] alert — bright blink");
+    } else if (!wifiUp) {
+      Serial.println("[led] no Wi-Fi — off");
+    } else {
+      Serial.println("[led] clear — dim breathing");
+    }
+  }
+
+  if (s_alert) {
+    // Bright blink: full on for 250 ms, off for 250 ms.
+    uint32_t phase = now % (BLINK_ON_MS + BLINK_OFF_MS);
+    analogWrite(HP_STATUS_LED_PIN, phase < BLINK_ON_MS ? 255 : 0);
+  } else if (!wifiUp) {
+    analogWrite(HP_STATUS_LED_PIN, 0);
+  } else {
+    // Dim breathing. sin() over a 2.6 s period, mapped to [BREATH_MIN, BREATH_MAX].
+    float t = (float)(now % BREATH_PERIOD_MS) / BREATH_PERIOD_MS;
+    float b = BREATH_MIN + (BREATH_MAX - BREATH_MIN) * (0.5f + 0.5f * sinf(2.0f * PI * t));
+    analogWrite(HP_STATUS_LED_PIN, (uint8_t)b);
+  }
+}
+
+#endif  // HP_STATUS_LED_RGB
 
 #else  // no HP_STATUS_LED_PIN — no-op build
 

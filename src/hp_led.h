@@ -1,9 +1,14 @@
-// Status LED — a single WS2812/NeoPixel that tells you at a glance whether the
-// trap is being poked.
+// Status LED — tells you at a glance whether the trap is being poked.
 //
-//   breathing yellow : not on the Wi-Fi network (unconfigured, or link down)
-//   breathing green  : on Wi-Fi, no SEV_ALERT events since boot (or since stats cleared)
-//   blinking red     : at least one alert — credential theft, dropper URL, ...
+// Two backends, chosen at build time:
+//   HP_STATUS_LED_RGB == 1 : a single WS2812/NeoPixel —
+//       breathing yellow : not on the Wi-Fi network (unconfigured, or link down)
+//       breathing green  : on Wi-Fi, no SEV_ALERT events since boot (or since stats cleared)
+//       blinking red     : at least one alert — credential theft, dropper URL, ...
+//   HP_STATUS_LED_RGB == 0 : a plain GPIO driven with hardware PWM (LEDC) —
+//       off           : not on the Wi-Fi network
+//       dim breathing : on Wi-Fi, no alerts
+//       bright blink  : at least one alert
 //
 // The pin is chosen at build time with -DHP_STATUS_LED_PIN=<gpio>. Boards
 // without the flag (e.g. esp32dev) compile this module to a no-op, so the
