@@ -305,7 +305,8 @@ the device on an isolated network segment — see below.
 ## Alerts
 
 **Settings → Alerts** supports Discord, Telegram, a generic JSON endpoint for
-SIEM ingest, and RFC 5424 syslog over UDP.
+SIEM ingest, and RFC 5424 syslog over UDP. Pick a destination, fill in its
+fields, then hit **send a test alert** to prove it works before you rely on it.
 
 | Setting | Why it matters |
 |---|---|
@@ -315,6 +316,54 @@ SIEM ingest, and RFC 5424 syslog over UDP.
 
 Delivery runs on its own task, so a slow or unreachable webhook can never delay
 the honeypot.
+
+### Discord
+
+1. In your server's **Settings → Integrations → Webhooks**, create a webhook
+   and copy its URL.
+2. In the panel, set **Send alerts to → Discord** and paste the webhook URL
+   into **Webhook URL**.
+3. Save, then **send a test alert** — you should see a message in the channel.
+
+Each alert is sent as a plain-text message: a severity glyph, the device
+hostname, the event kind, the source IP and port, and the detail line.
+
+### Telegram
+
+1. Talk to [@BotFather](https://t.me/BotFather) and create a bot — it gives you
+   a token like `123456:ABCdef...`.
+2. Message your bot once (any text) so it can reach you, then find your chat
+   ID — e.g. with [@userinfobot](https://t.me/userinfobot) or by calling
+   `https://api.telegram.org/bot<TOKEN>/getUpdates` and reading `chat.id`.
+3. In the panel, set **Send alerts to → Telegram**, enter
+   `https://api.telegram.org/bot<TOKEN>/sendMessage` as the **Webhook URL**,
+   and your chat ID in **Chat ID**.
+4. Save, then **send a test alert** — you should get a message from the bot.
+
+### A JSON endpoint (SIEM ingest)
+
+1. Point **Webhook URL** at any HTTPS endpoint that accepts `POST` with a JSON
+   body — a SIEM HTTP collector, a Lambda, a small script.  [Pushover](https://pushover.net/) is great for this btw - with free android/iOS apps (for personal use).
+2. Set **Send alerts to → a JSON endpoint** and save.
+
+Each alert is a structured object whose field names match the NDJSON written to
+flash, so your collector can parse both the same way:
+
+```json
+{"source":"srv-fileshare","seq":42,"ts":1752300000,"ip":"203.0.113.1",
+ "port":23,"kind":"login","severity":"alert","detail":"root / toor"}
+```
+
+### syslog
+
+1. Set **Send alerts to → syslog**.
+2. Enter the collector's **address** (IP or hostname) in **Collector address**.
+3. Optionally set the **UDP port** — defaults to 514.
+
+Each alert is sent as RFC 5424 over UDP, facility 13 (log audit), with the
+event kind as the APP-NAME and the source IP, port and severity as structured
+data, so a standard syslog server or SIEM can ingest it without a custom
+parser.
 
 ---
 
