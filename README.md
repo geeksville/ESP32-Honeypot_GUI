@@ -65,9 +65,9 @@ Every screenshot below is this firmware running on an **ESP32-S3-N16R8**
 | Cable | A USB **data** cable — many cheap cables are power-only and the board will never appear as a serial port. |
 | Network | 2.4 GHz Wi-Fi. ESP32 does not do 5 GHz. |
 
-ESP32-C6 (NanoC6) and C5 need Arduino core 3.x — use the
-[pioarduino](https://github.com/pioarduino/platform-espressif32) platform fork
-instead of `espressif32 @ ^6.6.0`.
+All environments build on the [pioarduino](https://github.com/pioarduino/platform-espressif32)
+platform fork, which ships **Arduino core 3.x / ESP-IDF 5.x**. That line rewrote
+the DHCP renewal handling and is required for ESP32-C6 (NanoC6) and C5.
 
 ## Install the toolchain
 
@@ -489,6 +489,13 @@ in Ns` means the network was not seen at all.
 antenna, so while the device retries a configured-but-absent network the beacon
 drops out for seconds at a time. Rescan a few times, or erase the stored
 configuration (below) for a rock-steady AP.
+
+**The address feels stale — DHCP never seems to renew.** If `WiFi.status()`
+keeps reporting connected but the address looks long dead, the router is
+quietly dropping renewals while the link stays up. The firmware builds on
+core 3.x / IDF 5.x, which renewed DHCP handling; if a router is still
+uncooperative, check its DHCP settings or give the device a static lease (see
+Exposing it to the internet).
 
 **Everything shows as `tcpwrapped`.** Too many ports armed — see
 [why only 8 ports](#why-only-8-ports).

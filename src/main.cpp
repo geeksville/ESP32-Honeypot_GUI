@@ -156,10 +156,10 @@ static void netTask(void*) {
       // worse than one that restarts and carries on. Flash keeps the log.
       if (ESP.getFreeHeap() < 24576) {
         if (++lowHeap >= 3) {
-          Serial.printf("[health] free heap %u for three checks — restarting\n",
-                        ESP.getFreeHeap());
-          evLog(EV_SYSTEM, SEV_ALERT, 0, 0, "restarting: heap exhausted (%u bytes free)",
-                ESP.getFreeHeap());
+          Serial.printf("[health] free heap %lu for three checks — restarting\n",
+                        (unsigned long)ESP.getFreeHeap());
+          evLog(EV_SYSTEM, SEV_ALERT, 0, 0, "restarting: heap exhausted (%lu bytes free)",
+                (unsigned long)ESP.getFreeHeap());
           delay(250);
           ESP.restart();
         }
@@ -179,8 +179,9 @@ void setup() {
   Serial.begin(115200);
   delay(300);
   Serial.printf("\n\n=== ESP32 Honeypot %s ===\n", HP_VERSION);
-  Serial.printf("[boot] %s, %u KB heap, %u KB PSRAM\n",
-                ESP.getChipModel(), ESP.getFreeHeap() / 1024, ESP.getPsramSize() / 1024);
+  Serial.printf("[boot] %s, %lu KB heap, %lu KB PSRAM\n",
+                ESP.getChipModel(), (unsigned long)(ESP.getFreeHeap() / 1024),
+                (unsigned long)(ESP.getPsramSize() / 1024));
 
   cfgSetDefaults(g_cfg);
   storeBegin();

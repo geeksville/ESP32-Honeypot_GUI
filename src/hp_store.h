@@ -1,5 +1,7 @@
 #pragma once
 #include "hp_common.h"
+#include <WiFi.h>   // core 3.x: WiFiClient is a typedef of NetworkClient, so a
+                    // bare forward declaration no longer compiles.
 
 // Mounts LittleFS, migrating a v1 SPIFFS config across if one is found.
 // Returns false only if the flash partition is unusable.
@@ -17,7 +19,6 @@ void   storeClearLog();
 
 // Streams the captured events straight from flash to an HTTP client, so a
 // multi-megabyte log never has to fit in RAM. `asCsv` converts on the fly.
-class WiFiClient;
 void storeStreamLog(class WebServer& srv, bool asCsv);
 
 constexpr const char* LOG_PATH  = "/events.ndjson";

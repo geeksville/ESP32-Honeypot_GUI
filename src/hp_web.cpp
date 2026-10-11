@@ -407,8 +407,13 @@ void webBegin() {
 static bool s_mdnsStarted = false;
 
 static void mdnsApply() {
-  if (s_mdnsStarted) MDNS.end();
-  s_mdnsStarted = false;
+  // Fully tear the responder down and start fresh, so a re-apply (hostname or
+  // armed-set change) never accumulates duplicates. MDNS.end() also clears the
+  // pre-registered records that IDF 5.x's mdns_init() may have added.
+  if (s_mdnsStarted) {
+    MDNS.end();
+    s_mdnsStarted = false;
+  }
 
   if (!MDNS.begin(g_cfg.hostname)) {
     Serial.println("[mdns] could not start mDNS responder");
@@ -416,9 +421,22 @@ static void mdnsApply() {
   }
   s_mdnsStarted = true;
 
+  // Re-applies can race the responder task of a *previous* instance if end()
+  // wasn't fully drained; for each record make sure it isn't already there
+  // before adding, and log if it still is.
+  const auto ensureService = [](const char* type, const char* proto, uint16_t port) {
+    if (mdns_service_exists(type, proto, nullptr)) {
+      Serial.printf("[mdns] %s.%s already advertised — keeping existing\n", type, proto);
+      return;
+    }
+    if (!MDNS.addService(type, proto, port)) {
+      Serial.printf("[mdns] failed to advertise %s.%s on %u\n", type, proto, port);
+    }
+  };
+
   // The panel record is unconditional — without it the operator has no mDNS
   // way to find the device at all.
-  MDNS.addService("http", "tcp", 80);
+  ensureService("http", "tcp", 80);
   Serial.printf("[mdns] control panel at http://%s.local/\n", g_cfg.hostname);
 
   if (!g_cfg.mdnsAdvertise) {
@@ -431,7 +449,7 @@ static void mdnsApply() {
   for (size_t i = 0; i < n; i++) {
     const ServiceDef& d = cat[i];
     if (!d.mdnsType || !cfgPortArmed(d.port)) continue;
-    MDNS.addService(d.mdnsType, "tcp", d.port);
+    ensureService(d.mdnsType, "tcp", d.port);
     // TXT records are key=value pairs; the catalogue stores them as one
     // "u=root" string, split here for the ESPmDNS API.
     if (d.mdnsTxt) {
