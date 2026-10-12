@@ -98,8 +98,18 @@ void ledPump() {
 //   dim breathing : on Wi-Fi, no alerts
 //   bright blink  : at least one alert
 // analogWrite() on the ESP32 maps to the LEDC peripheral — true hardware PWM.
-static const uint8_t  BREATH_MIN = 2;
-static const uint8_t  BREATH_MAX = 30;
+// Some boards (e.g. the XIAO ESP32S3 user LED on GPIO 21) wire the LED from
+// 3.3V through to the pin, so the logic is active-low: high duty = off, and a
+// plain '0' is fully on. HP_STATUS_LED_ACTIVE_LOW inverts the duty so the
+// states above read correctly.
+#if defined(HP_STATUS_LED_ACTIVE_LOW) && HP_STATUS_LED_ACTIVE_LOW == 1
+static inline int ledDuty(int duty) { return 255 - duty; }
+#else
+static inline int ledDuty(int duty) { return duty; }
+#endif
+
+static const uint8_t  BREATH_MIN = 20;
+static const uint8_t  BREATH_MAX = 60;
 static const uint32_t BREATH_PERIOD_MS = 2600;   // one full in-out cycle
 
 // Blink: full brightness for this long, then off, repeating.
@@ -111,7 +121,7 @@ static bool     s_alert  = false;
 static bool     s_wifiUp = false;
 
 void ledBegin() {
-  analogWrite(HP_STATUS_LED_PIN, 0);
+  analogWrite(HP_STATUS_LED_PIN, ledDuty(0));
   Serial.printf("[led] status LED on GPIO %d (PWM)\n", HP_STATUS_LED_PIN);
 }
 
@@ -137,14 +147,14 @@ void ledPump() {
   if (s_alert) {
     // Bright blink: full on for 250 ms, off for 250 ms.
     uint32_t phase = now % (BLINK_ON_MS + BLINK_OFF_MS);
-    analogWrite(HP_STATUS_LED_PIN, phase < BLINK_ON_MS ? 255 : 0);
+    analogWrite(HP_STATUS_LED_PIN, ledDuty(phase < BLINK_ON_MS ? 255 : 0));
   } else if (!wifiUp) {
-    analogWrite(HP_STATUS_LED_PIN, 0);
+    analogWrite(HP_STATUS_LED_PIN, ledDuty(0));
   } else {
     // Dim breathing. sin() over a 2.6 s period, mapped to [BREATH_MIN, BREATH_MAX].
     float t = (float)(now % BREATH_PERIOD_MS) / BREATH_PERIOD_MS;
     float b = BREATH_MIN + (BREATH_MAX - BREATH_MIN) * (0.5f + 0.5f * sinf(2.0f * PI * t));
-    analogWrite(HP_STATUS_LED_PIN, (uint8_t)b);
+    analogWrite(HP_STATUS_LED_PIN, ledDuty((uint8_t)b));
   }
 }
 

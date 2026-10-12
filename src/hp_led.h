@@ -13,6 +13,10 @@
 // The pin is chosen at build time with -DHP_STATUS_LED_PIN=<gpio>. Boards
 // without the flag (e.g. esp32dev) compile this module to a no-op, so the
 // firmware still builds and runs on hardware with no LED wired up.
+//
+// If the LED is wired 3.3V -> LED -> pin (active low, like the XIAO ESP32S3
+// user LED on GPIO 21), also pass -DHP_STATUS_LED_ACTIVE_LOW=1; the GPIO
+// backend inverts the PWM duty so the states still read as documented above.
 #pragma once
 #include <Arduino.h>
 
